@@ -5,9 +5,8 @@ import { useCart } from '../context/CartContext';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation'; // للتوجيه بعد الطلب
 import {
-    CreditCard,
+    ChevronDown,
     Truck,
-    ShieldCheck,
     MapPin,
     Phone,
     User,
@@ -40,7 +39,7 @@ export default function CheckoutPage() {
         cartItems.forEach((item: any, index: number) => {
             itemsList += `${index + 1}- *${item.name}*\n`;
             itemsList += `   المقاس: ${item.size} | اللون: ${item.color}\n`;
-            itemsList += `   الكمية: ${item.quantity} × ${item.price} = *${item.quantity * item.price} ر.س*\n`;
+            itemsList += `   الكمية: ${item.quantity} × ${item.price} = *${item.quantity * item.price} EGY*\n`;
             itemsList += `--------------------------\n`;
         });
 
@@ -56,9 +55,9 @@ export default function CheckoutPage() {
 --------------------------
 ${itemsList}
 💰 *الحساب الإجمالي:*
-• المجموع الفرعي: ${subtotal} ر.س
-• الشحن: ${shipping === 0 ? 'مجاني' : shipping + ' ر.س'}
-• *الإجمالي النهائي: ${total} ر.س*
+• المجموع الفرعي: ${subtotal} EGY
+• الشحن: ${shipping === 0 ? 'مجاني' : shipping + ' EGY'}
+• *الإجمالي النهائي: ${total} EGY*
 
 💳 *طريقة الدفع:* الدفع عند الاستلام
 --------------------------
@@ -152,13 +151,51 @@ ${itemsList}
                                         </div>
                                     </div>
                                     <div className="space-y-2 text-right">
-                                        <label className="text-xs font-black text-gray-400 mr-2">المدينة</label>
-                                        <select name="city" className="w-full bg-gray-50 border-none p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right appearance-none cursor-pointer">
-                                            <option value="الرياض">الرياض</option>
-                                            <option value="جدة">جدة</option>
-                                            <option value="الدمام">الدمام</option>
-                                            <option value="مكة">مكة</option>
-                                        </select>
+                                        <label className="text-xs font-black text-gray-400 mr-2">المحافظة</label>
+                                        <div className="relative">
+                                            <select
+                                                name="governorate"
+                                                required
+                                                defaultValue="" // الطريقة الصحيحة بدلاً من selected على option
+                                                className="w-full bg-gray-50 border-none p-4 pr-4 pl-12 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right text-gray-900 appearance-none cursor-pointer"
+                                            >
+                                                <option value="" disabled>اختر المحافظة</option>
+
+                                                {/* محافظات مصر بالترتيب */}
+                                                <option value="القاهرة">القاهرة</option>
+                                                <option value="الجيزة">الجيزة</option>
+                                                <option value="الإسكندرية">الإسكندرية</option>
+                                                <option value="الدقهلية">الدقهلية</option>
+                                                <option value="البحر الأحمر">البحر الأحمر</option>
+                                                <option value="البحيرة">البحيرة</option>
+                                                <option value="الفيوم">الفيوم</option>
+                                                <option value="الغربية">الغربية</option>
+                                                <option value="الإسماعيلية">الإسماعيلية</option>
+                                                <option value="المنوفية">المنوفية</option>
+                                                <option value="القليوبية">القليوبية</option>
+                                                <option value="الوادي الجديد">الوادي الجديد</option>
+                                                <option value="السويس">السويس</option>
+                                                <option value="الشرقية">الشرقية</option>
+                                                <option value="بورسعيد">بورسعيد</option>
+                                                <option value="دمياط">دمياط</option>
+                                                <option value="مطروح">مطروح</option>
+                                                <option value="كفر الشيخ">كفر الشيخ</option>
+                                                <option value="بني سويف">بني سويف</option>
+                                                <option value="المنيا">المنيا</option>
+                                                <option value="أسيوط">أسيوط</option>
+                                                <option value="سوهاج">سوهاج</option>
+                                                <option value="قنا">قنا</option>
+                                                <option value="الأقصر">الأقصر</option>
+                                                <option value="أسوان">أسوان</option>
+                                                <option value="شمال سيناء">شمال سيناء</option>
+                                                <option value="جنوب سيناء">جنوب سيناء</option>
+                                            </select>
+
+                                            {/* أيقونة السهم لتعويض الـ appearance-none وجعل الشكل فاخر */}
+                                            <div className="absolute left-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-300">
+                                                <ChevronDown size={18} />
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </section>
@@ -200,15 +237,15 @@ ${itemsList}
 
                                 <div className="space-y-4 border-t pt-8 font-bold">
                                     <div className="flex justify-between text-gray-500">
-                                        <span>{subtotal} ر.س</span>
+                                        <span>{subtotal} EGY</span>
                                         <span>المجموع الفرعي</span>
                                     </div>
                                     <div className="flex justify-between text-gray-500">
-                                        <span>{shipping === 0 ? 'مجاني' : `${shipping} ر.س`}</span>
+                                        <span>{shipping === 0 ? 'مجاني' : `${shipping} EGY`}</span>
                                         <span>الشحن</span>
                                     </div>
                                     <div className="flex justify-between text-2xl font-black text-gray-900 pt-4 border-t border-dashed mt-4">
-                                        <span>{total} ر.س</span>
+                                        <span>{total} EGY</span>
                                         <span>الإجمالي</span>
                                     </div>
                                 </div>

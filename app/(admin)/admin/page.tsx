@@ -2,101 +2,170 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Loader2 } from 'lucide-react';
+import {
+    Loader2, TrendingUp, Users, Package, ShoppingBag,
+    ArrowUpRight, Calendar, Heart
+} from 'lucide-react';
+import {
+    AreaChart, Area, XAxis, YAxis, Tooltip,
+    ResponsiveContainer, PieChart, Pie, Cell
+} from 'recharts';
 
 export default function AdminDashboard() {
     const [loading, setLoading] = useState(true);
-    const [statsData, setStatsData] = useState({
-        sales: 0,
-        orders: 0,
-        users: 0,
-        products: 0,
-    });
+    const [chartData, setChartData] = useState<any[]>([]);
+    const [statusData, setStatusData] = useState<any[]>([]);
+    const [statsData, setStatsData] = useState({ sales: 0, orders: 0, users: 0, products: 0 });
+
+    // الألوان الجديدة (ألوان خيوط وأقمشة فاخرة)
+    const COLORS = {
+        primary: "#8B735B", // ذهبي مطفي / برونزي
+        secondary: "#D4C3B3", // بيج فاتح
+        accent: "#4A5D4E", // زيتي هادئ (يدل على الفخامة)
+        danger: "#A66C6C", // وردي غامق للملغي
+    };
 
     useEffect(() => {
         const fetchStats = async () => {
             setLoading(true);
             try {
-                // 1. جلب عدد المستخدمين من جدول profiles
-                const { count: usersCount } = await supabase
-                    .from('profiles')
-                    .select('*', { count: 'exact', head: true });
+                const { count: uCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
+                const { count: pCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
+                const { data: oData } = await supabase.from('orders').select('total_price, created_at, status');
 
-                // 2. جلب عدد المنتجات من جدول products
-                const { count: productsCount } = await supabase
-                    .from('products')
-                    .select('*', { count: 'exact', head: true });
+                const totalSales = oData?.reduce((acc, o) => acc + (o.total_price || 0), 0) || 0;
 
-                // 3. جلب عدد الطلبات وإجمالي المبيعات (بافتراض وجود جدول باسم orders)
-                // لو الجدول لسه مش موجود، القيم هتفضل 0 عشان الكود ميعملش Error
-                const { data: ordersData } = await supabase
-                    .from('orders')
-                    .select('total_price');
+                const timeline = oData?.reduce((acc: any, o: any) => {
+                    const day = new Date(o.created_at).toLocaleDateString('ar-EG', { day: 'numeric', month: 'short' });
+                    acc[day] = (acc[day] || 0) + o.total_price;
+                    return acc;
+                }, {});
+                setChartData(Object.keys(timeline).map(date => ({ date, amount: timeline[date] })));
 
-                const totalSales = ordersData?.reduce((acc, order) => acc + (order.total_price || 0), 0) || 0;
-                const totalOrders = ordersData?.length || 0;
+                const statuses = oData?.reduce((acc: any, o: any) => {
+                    acc[o.status] = (acc[o.status] || 0) + 1;
+                    return acc;
+                }, {});
+                setStatusData([
+                    { name: 'مكتمل', value: statuses['completed'] || 0, color: COLORS.accent },
+                    { name: 'قيد الانتظار', value: statuses['pending'] || 0, color: COLORS.primary },
+                    { name: 'ملغي', value: statuses['cancelled'] || 0, color: COLORS.danger },
+                ]);
 
-                setStatsData({
-                    sales: totalSales,
-                    orders: totalOrders,
-                    users: usersCount || 0,
-                    products: productsCount || 0,
-                });
-            } catch (error) {
-                console.error("Error fetching stats:", error);
-            } finally {
-                setLoading(false);
-            }
+                setStatsData({ sales: totalSales, orders: oData?.length || 0, users: uCount || 0, products: pCount || 0 });
+            } catch (e) { console.error(e); } finally { setLoading(false); }
         };
-
         fetchStats();
     }, []);
 
-    const stats = [
-        { title: "إجمالي المبيعات", value: `${statsData.sales.toLocaleString()} ر.س`, growth: "+12%", color: "text-green-600" },
-        { title: "عدد الطلبات", value: statsData.orders.toString(), growth: "+5", color: "text-blue-600" },
-        { title: "المستخدمين", value: statsData.users.toString(), growth: `+${statsData.users}`, color: "text-amber-600" },
-        { title: "المنتجات", value: statsData.products.toString(), growth: "مستقر", color: "text-gray-600" },
-    ];
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <Loader2 className="animate-spin text-amber-700" size={40} />
-            </div>
-        );
-    }
+    if (loading) return (
+        <div className="flex flex-col items-center justify-center h-screen gap-4 bg-[#FCFBF9]">
+            <Loader2 className="animate-spin text-[#8B735B]" size={40} />
+            <p className="text-sm font-serif italic text-[#8B735B]">يتم تحضير لوحة الإبداع...</p>
+        </div>
+    );
 
     return (
-        <div className="space-y-10">
-            <header className="flex justify-between items-center">
+        <div className="space-y-8 pb-10 bg-[#FCFBF9]" dir="rtl">
+            {/* Header */}
+            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-black text-gray-900">لوحة التحكم</h1>
-                    <p className="text-gray-500 text-sm">أهلاً بك يا محمد، إليك ملخص أداء المتجر اليوم من قاعدة البيانات.</p>
+                    <h1 className="text-4xl font-serif text-[#4A3E31] tracking-tight">موجز الإبداع</h1>
+                    <p className="text-[#8B735B] font-medium italic">إحصائيات تليق بفن التطريز اليدوي.</p>
+                </div>
+                <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-full border border-[#EDEAE5] shadow-sm">
+                    <Calendar size={16} className="text-[#8B735B]" />
+                    <span className="text-xs font-bold text-[#4A3E31]">تقرير الشهر الحالي</span>
                 </div>
             </header>
 
-            {/* شبكة الإحصائيات */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                {stats.map((stat, i) => (
-                    <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm space-y-2 hover:shadow-md transition-shadow">
-                        <p className="text-gray-400 text-xs font-bold uppercase tracking-widest">{stat.title}</p>
-                        <div className="flex justify-between items-end">
-                            <span className="text-2xl font-black text-gray-900">{stat.value}</span>
-                            <span className={`text-[10px] font-bold ${stat.color} bg-gray-50 px-2 py-1 rounded-lg`}>
-                                {stat.growth}
+            {/* Statistics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                    { label: "إجمالي المبيعات", val: statsData.sales, icon: <ShoppingBag />, bg: "bg-[#F7F3F0]", text: "text-[#8B735B]" },
+                    { label: "طلبات الحب", val: statsData.orders, icon: <Heart />, bg: "bg-[#F0F4F1]", text: "text-[#4A5D4E]" },
+                    { label: "عشاق البراند", val: statsData.users, icon: <Users />, bg: "bg-[#F9F5F6]", text: "text-[#A66C6C]" },
+                    { label: "قطع فنية", val: statsData.products, icon: <Package />, bg: "bg-[#F2F2F2]", text: "text-[#555555]" }
+                ].map((s, i) => (
+                    <div key={i} className="bg-white p-6 rounded-[2rem] border border-[#EDEAE5] shadow-sm relative overflow-hidden group hover:border-[#8B735B] transition-all">
+                        <div className="flex justify-between items-start">
+                            <div className={`p-3 ${s.bg} ${s.text} rounded-2xl transition-all group-hover:scale-110`}>
+                                {s.icon}
+                            </div>
+                            <span className="text-[10px] font-bold text-[#8B735B] bg-[#F7F3F0] px-2 py-1 rounded-full flex items-center">
+                                نمو <ArrowUpRight size={10} className="mr-1" />
                             </span>
+                        </div>
+                        <div className="mt-6">
+                            <p className="text-[#A6998A] text-[10px] font-black uppercase tracking-widest">{s.label}</p>
+                            <h3 className="text-2xl font-serif text-[#4A3E31] mt-1">{s.val.toLocaleString()}</h3>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* رسم بياني تخيلي أو جدول أحدث الطلبات */}
-            <div className="bg-white p-8 rounded-[3rem] border border-gray-100 shadow-sm h-64 flex flex-col items-center justify-center text-gray-400 gap-4">
-                <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center">
-                    📈
+            {/* Charts Section */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Sales Curve */}
+                <div className="lg:col-span-2 bg-white p-8 rounded-[3rem] border border-[#EDEAE5] shadow-sm">
+                    <h3 className="text-xl font-serif text-[#4A3E31] mb-10">منحنى المبيعات اليدوية</h3>
+                    <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={chartData}>
+                                <defs>
+                                    <linearGradient id="silkGradient" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#8B735B" stopOpacity={0.2} />
+                                        <stop offset="95%" stopColor="#8B735B" stopOpacity={0} />
+                                    </linearGradient>
+                                </defs>
+                                <XAxis dataKey="date" hide />
+                                <Tooltip
+                                    content={({ active, payload }) => (
+                                        active && payload && (
+                                            <div className="bg-[#4A3E31] text-[#F7F3F0] p-4 rounded-2xl shadow-xl">
+                                                <p className="text-[10px] opacity-70 mb-1">{payload[0].payload.date}</p>
+                                                <p className="text-sm font-bold">{payload[0].value?.toLocaleString()} ج.م</p>
+                                            </div>
+                                        )
+                                    )}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="amount"
+                                    stroke="#8B735B"
+                                    strokeWidth={4}
+                                    fill="url(#silkGradient)"
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
-                <p className="text-sm font-medium">هنا سيتم ربط الرسم البياني للمبيعات لاحقاً</p>
+
+                {/* Distribution Chart */}
+                <div className="bg-white p-8 rounded-[3rem] border border-[#EDEAE5] shadow-sm">
+                    <h3 className="text-xl font-serif text-[#4A3E31] mb-6">حالات الطلبات</h3>
+                    <div className="h-[200px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                                <Pie data={statusData} innerRadius={60} outerRadius={80} paddingAngle={10} dataKey="value">
+                                    {statusData.map((entry, index) => <Cell key={index} fill={entry.color} />)}
+                                </Pie>
+                                <Tooltip />
+                            </PieChart>
+                        </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-3 mt-6">
+                        {statusData.map((s, i) => (
+                            <div key={i} className="flex justify-between items-center bg-[#FCFBF9] p-3 rounded-2xl border border-[#F7F3F0]">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full" style={{ background: s.color }}></div>
+                                    <span className="text-xs font-bold text-[#8B735B]">{s.name}</span>
+                                </div>
+                                <span className="text-xs font-black text-[#4A3E31]">{s.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
             </div>
         </div>
     );

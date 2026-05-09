@@ -1,15 +1,33 @@
 "use client";
 
-import { useState } from 'react';
-import { Mail, Lock, User, ArrowLeft, ArrowRight, ShieldCheck, Loader2 } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import {
+    Mail,
+    Lock,
+    User,
+    ArrowLeft,
+    ArrowRight,
+    ShieldCheck,
+    Loader2,
+    Eye,
+    EyeOff
+} from 'lucide-react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { Toaster, toast } from 'sonner';
 
 export default function AuthPage() {
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [mounted, setMounted] = useState(false);
     const router = useRouter();
+
+    // لحل مشكلة الـ Hydration في Next.js
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
@@ -22,7 +40,7 @@ export default function AuthPage() {
 
         try {
             if (isLogin) {
-                // 1. تسجيل الدخول الأساسي
+                // 1. تسجيل الدخول
                 const { data, error } = await supabase.auth.signInWithPassword({
                     email,
                     password,
@@ -31,21 +49,24 @@ export default function AuthPage() {
                 if (error) throw error;
 
                 if (data?.user) {
-                    // 2. فحص صلاحية المستخدم (Admin أم User) من الجدول اللي جهزناه
+                    // 2. جلب بيانات البروفايل لمعرفة الصلاحية
                     const { data: profile, error: profileError } = await supabase
                         .from('profiles')
-                        .select('role')
+                        .select('role, full_name')
                         .eq('id', data.user.id)
                         .single();
 
-                    if (profileError) throw profileError;
+                    toast.success('تم تسجيل الدخول بنجاح', {
+                        description: `مرحباً بك مجدداً ${profile?.full_name || ''}`,
+                    });
 
-                    // 3. التوجيه بناءً على الصلاحية
+                    // 3. التوجيه بناءً على الصلاحية (أدمن أو مستخدم عادي)
                     if (profile?.role === 'admin') {
-                        router.push('/admin'); // توجيه للأدمن
+                        router.push('/admin');
                     } else {
-                        router.push('/'); // توجيه لليوزر العادي
+                        router.push('/'); // يذهب للصفحة الرئيسية
                     }
+
                     router.refresh();
                 }
 
@@ -63,21 +84,30 @@ export default function AuthPage() {
 
                 if (signUpError) throw signUpError;
 
-                alert("تم إنشاء الحساب بنجاح! يمكنك الدخول الآن.");
+                toast.success('تم إنشاء الحساب بنجاح', {
+                    description: 'يمكنك الآن تسجيل الدخول إلى حسابك الجديد',
+                });
+
                 setIsLogin(true);
             }
         } catch (error: any) {
-            alert(error.message || "حدث خطأ ما");
+            toast.error('حدث خطأ في العملية', {
+                description: error.message || 'يرجى التحقق من البيانات والمحاولة مرة أخرى',
+            });
         } finally {
             setLoading(false);
         }
     };
 
+    if (!mounted) return null;
+
     return (
         <main className="min-h-screen bg-[#FAFAFA] flex items-center justify-center p-6" dir="rtl">
+            <Toaster position="top-center" dir="rtl" richColors />
+
             <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-[3rem] shadow-sm border border-gray-100">
 
-                {/* الشعار والترحيب */}
+                {/* الرأس والرجوع */}
                 <div className="text-center space-y-2">
                     <Link href="/" className="inline-flex items-center text-xs font-black uppercase tracking-[0.3em] text-gray-400 hover:text-black transition-colors mb-6">
                         <ArrowRight size={14} className="ml-2" /> العودة للمتجر
@@ -97,7 +127,7 @@ export default function AuthPage() {
                                     name="fullName"
                                     required
                                     type="text"
-                                    placeholder="محمد مراد"
+                                    placeholder="الاسم بالكامل"
                                     className="w-full bg-gray-50 border-none p-4 pr-12 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right text-gray-900"
                                 />
                                 <User className="absolute right-4 top-4 text-gray-300" size={18} />
@@ -105,6 +135,7 @@ export default function AuthPage() {
                         </div>
                     )}
 
+                    {/* حقل البريد الإلكتروني */}
                     <div className="space-y-2 text-right">
                         <label className="text-xs font-black text-gray-400 mr-2">البريد الإلكتروني</label>
                         <div className="relative">
@@ -112,28 +143,46 @@ export default function AuthPage() {
                                 name="email"
                                 required
                                 type="email"
-                                placeholder="name@example.com"
+                                placeholder="example@mail.com"
                                 className="w-full bg-gray-50 border-none p-4 pr-12 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right text-gray-900"
                             />
                             <Mail className="absolute right-4 top-4 text-gray-300" size={18} />
                         </div>
                     </div>
 
+                    {/* حقل كلمة المرور المطور */}
                     <div className="space-y-2 text-right">
                         <label className="text-xs font-black text-gray-400 mr-2">كلمة المرور</label>
                         <div className="relative">
                             <input
                                 name="password"
                                 required
-                                type="password"
+                                type={showPassword ? "text" : "password"}
                                 placeholder="••••••••"
-                                className="w-full bg-gray-50 border-none p-4 pr-12 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right text-gray-900"
+                                className="w-full bg-gray-50 border-none p-4 pr-12 pl-12 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all text-right text-gray-900"
                             />
+                            {/* أيقونة القفل على اليمين */}
                             <Lock className="absolute right-4 top-4 text-gray-300" size={18} />
+
+                            {/* زر إظهار الباسورد على اليسار */}
+                            <button
+                                type="button"
+                                onClick={() => setShowPassword(!showPassword)}
+                                className="absolute left-4 top-4 text-gray-300 hover:text-black transition-colors"
+                                tabIndex={-1}
+                            >
+                                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                         </div>
-                        {isLogin && (
-                            <button type="button" className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black mt-2 mr-2">نسيت كلمة المرور؟</button>
-                        )}
+                        {/* {isLogin && (
+                            <button
+                                type="button"
+                                onClick={() => toast.info('يرجى التواصل مع الدعم الفني لاستعادة حسابك')}
+                                className="text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black mt-2 mr-2"
+                            >
+                                نسيت كلمة المرور؟
+                            </button>
+                        )} */}
                     </div>
 
                     <button
@@ -145,7 +194,7 @@ export default function AuthPage() {
                             <Loader2 className="animate-spin" size={20} />
                         ) : (
                             <>
-                                {isLogin ? 'دخول' : 'إنشاء حساب'}
+                                {isLogin ? 'تسجيل الدخول' : 'إنشاء حساب جديد'}
                                 <ArrowLeft size={20} />
                             </>
                         )}
@@ -164,7 +213,7 @@ export default function AuthPage() {
 
                 <div className="pt-8 flex items-center justify-center gap-2 text-gray-300 text-[10px] font-black uppercase tracking-widest border-t border-gray-50">
                     <ShieldCheck size={14} />
-                    <span>بياناتك محمية ومشفرة</span>
+                    <span>جميع البيانات محمية ومشفرة</span>
                 </div>
             </div>
         </main>

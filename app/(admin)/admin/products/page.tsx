@@ -103,7 +103,7 @@ export default function ProductsPage() {
                     ) : filteredProducts.map((product) => (
                         <div key={product.id} className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden group hover:shadow-md transition-all">
                             <div className="aspect-[4/5] bg-gray-50 relative overflow-hidden">
-                                <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                                <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                                 <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm px-3 py-1 rounded-full text-[10px] font-black uppercase">
                                     {product.category}
                                 </div>
