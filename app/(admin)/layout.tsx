@@ -12,7 +12,8 @@ import {
     ClipboardList,
     LogOut,
     Menu,
-    X
+    X,
+    Truck
 } from "lucide-react";
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +23,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     const menuItems = [
         { name: "الإحصائيات", icon: <LayoutDashboard size={20} />, href: "/admin" },
         { name: "الطلبات", icon: <ClipboardList size={20} />, href: "/admin/orders" },
+        { name: "الشحن", icon: <Truck size={20} />, href: "/admin/shipping" },
         { name: "المنتجات", icon: <ShoppingBag size={20} />, href: "/admin/products" },
         { name: "إضافة منتج", icon: <PlusCircle size={20} />, href: "/admin/add-product" },
         { name: "المستخدمين", icon: <Users size={20} />, href: "/admin/users" },
