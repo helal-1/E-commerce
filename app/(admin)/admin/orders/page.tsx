@@ -9,7 +9,8 @@ import {
     Search,
     User,
     MapPin,
-    CreditCard
+    CreditCard,
+    Loader2
 } from 'lucide-react';
 
 interface Order {
@@ -17,6 +18,7 @@ interface Order {
     created_at: string;
     customer_name: string;
     customer_phone: string;
+    customer_email?: string; // أضفت حقل الإيميل هنا
     city: string;
     address: string;
     total_price: number;
@@ -28,17 +30,18 @@ export default function OrdersPage() {
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
+    const [processingId, setProcessingId] = useState<string | null>(null);
 
-    // دالة إرسال إشعار للنظام (Mobile/Desktop Notification)
+    // دالة إرسال إشعار للنظام (إشعار الموبايل/الديسك توب)
     const sendSystemNotification = (order: Order) => {
         if (!("Notification" in window)) return;
 
         if (Notification.permission === "granted") {
             const notification = new Notification("Zelda Line - طلب جديد! ✨", {
                 body: `وصل طلب جديد من ${order.customer_name} بقيمة ${order.total_price} ج.م`,
-                icon: "/favicon.ico", // تأكد من وجود أيقونة للموقع
+                icon: "/favicon.ico",
                 badge: "/favicon.ico",
-                tag: "new-order" // لمنع تكرار الإشعارات لنفس الحدث
+                tag: "new-order"
             });
 
             notification.onclick = () => {
@@ -60,7 +63,7 @@ export default function OrdersPage() {
     }, []);
 
     useEffect(() => {
-        // طلب إذن الإشعارات من الأدمن عند فتح الصفحة
+        // طلب إذن الإشعارات عند فتح الصفحة
         if ("Notification" in window && Notification.permission !== "granted") {
             Notification.requestPermission();
         }
@@ -73,18 +76,13 @@ export default function OrdersPage() {
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'orders' },
                 (payload) => {
-                    console.log('طلب جديد وصل:', payload);
                     const newOrder = payload.new as Order;
-
-                    // 1. إضافة الطلب للقائمة
                     setOrders((prev) => [newOrder, ...prev]);
-
-                    // 2. إرسال إشعار للنظام
                     sendSystemNotification(newOrder);
 
-                    // 3. تنبيه صوتي اختياري (اختياري: يمكنك إضافة ملف صوتي)
-                    const audio = new Audio('/notification.mp3');
-                    audio.play().catch(e => console.log("Audio play blocked"));
+                    // صوت تنبيه خفيف
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+                    audio.play().catch(() => { });
                 }
             )
             .on(
@@ -113,6 +111,8 @@ export default function OrdersPage() {
     }, [fetchOrders]);
 
     const updateStatus = async (orderId: string, newStatus: string) => {
+        setProcessingId(orderId);
+
         const { data, error } = await supabase
             .from('orders')
             .update({ status: newStatus })
@@ -122,26 +122,36 @@ export default function OrdersPage() {
 
         if (error) {
             alert("خطأ في التحديث: " + error.message);
+            setProcessingId(null);
             return;
         }
 
         if (data) {
+            // تحديث الواجهة فوراً
             setOrders(prevOrders =>
                 prevOrders.map(order => order.id === orderId ? { ...order, status: newStatus } : order)
             );
 
+            // إذا تم الاعتماد (Completed)، نرسل الإيميل التلقائي عبر الـ API الجديد
             if (newStatus === 'completed') {
-                const phoneNumber = data.customer_phone.replace(/\s+/g, '');
-                const orderIdShort = data.id.slice(0, 8);
-                const message = `مرحباً أ/ ${data.customer_name} ✨%0a%0a` +
-                    `يسعدنا إبلاغك بأنه تم تأكيد طلبك رقم *#${orderIdShort}* بنجاح من *Zelda Line* 🛍️%0a%0a` +
-                    `نحن الآن نقوم بتجهيز القطعة بكل حب، وسنقوم بالتواصل معكِ قريباً لتحديد موعد التسليم الدقيق.%0a%0a` +
-                    `شكراً لثقتك بنا 🙏❤️`;
-
-                const whatsappUrl = `https://wa.me/${phoneNumber}?text=${message}`;
-                window.open(whatsappUrl, '_blank');
+                try {
+                    await fetch('/api/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            customerName: data.customer_name,
+                            customerEmail: data.customer_email || 'no-email@provided.com',
+                            orderId: data.id,
+                            totalPrice: data.total_price
+                        }),
+                    });
+                    console.log("تم إرسال إيميل التأكيد بنجاح");
+                } catch (err) {
+                    console.error("فشل إرسال الإيميل:", err);
+                }
             }
         }
+        setProcessingId(null);
     };
 
     const filteredOrders = orders.filter(order => {
@@ -158,7 +168,7 @@ export default function OrdersPage() {
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
                         <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-tight tracking-tighter">إدارة الطلبات</h1>
-                        <p className="text-gray-500 mt-1 font-medium text-sm">تابع طلبات العملاء وحالات الشحن لحظة بلحظة.</p>
+                        <p className="text-gray-500 mt-1 font-medium text-sm">تصلك إشعارات النظام فور وصول طلب جديد.</p>
                     </div>
 
                     <div className="relative w-full md:w-80">
@@ -202,7 +212,10 @@ export default function OrdersPage() {
                                             </div>
                                         </div>
                                     </td>
-                                    <td className="p-6 font-bold text-sm">{order.customer_name}<br /><span className="text-xs text-gray-400 font-medium">{order.customer_phone}</span></td>
+                                    <td className="p-6 font-bold text-sm">
+                                        {order.customer_name}<br />
+                                        <span className="text-xs text-gray-400 font-medium">{order.customer_phone}</span>
+                                    </td>
                                     <td className="p-6">
                                         <p className="text-xs text-gray-600 truncate max-w-50 font-medium">{order.city} - {order.address}</p>
                                         <p className="text-[10px] font-black text-black mt-1">{order.items?.length || 0} منتجات</p>
@@ -210,8 +223,25 @@ export default function OrdersPage() {
                                     <td className="p-6 font-black text-sm text-gray-900">{order.total_price} EGP</td>
                                     <td className="p-6">
                                         <div className="flex justify-center gap-2">
-                                            <button onClick={() => updateStatus(order.id, 'completed')} className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"><CheckCircle2 size={18} /></button>
-                                            <button onClick={() => updateStatus(order.id, 'cancelled')} className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"><XCircle size={18} /></button>
+                                            {processingId === order.id ? (
+                                                <Loader2 className="animate-spin text-gray-400" size={20} />
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => updateStatus(order.id, 'completed')}
+                                                        title="اعتماد وإرسال إيميل"
+                                                        className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"
+                                                    >
+                                                        <CheckCircle2 size={18} />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => updateStatus(order.id, 'cancelled')}
+                                                        className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
+                                                    >
+                                                        <XCircle size={18} />
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>
@@ -234,7 +264,7 @@ export default function OrdersPage() {
                                 <span className="text-[10px] bg-orange-50 text-orange-600 px-3 py-1 rounded-full font-black">قيد الانتظار</span>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 py-2 border-y border-gray-50">
+                            <div className="grid grid-cols-2 gap-4 py-2 border-y border-gray-50 text-right">
                                 <div className="space-y-1">
                                     <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><User size={10} /> العميل</p>
                                     <p className="text-xs font-bold">{order.customer_name}</p>
@@ -246,8 +276,20 @@ export default function OrdersPage() {
                             </div>
 
                             <div className="flex gap-2 pt-2">
-                                <button onClick={() => updateStatus(order.id, 'completed')} className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-xs font-bold"><CheckCircle2 size={16} /> اعتماد</button>
-                                <button onClick={() => updateStatus(order.id, 'cancelled')} className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold"><XCircle size={16} /> إلغاء</button>
+                                <button
+                                    disabled={processingId === order.id}
+                                    onClick={() => updateStatus(order.id, 'completed')}
+                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                                >
+                                    {processingId === order.id ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle2 size={16} /> اعتماد</>}
+                                </button>
+                                <button
+                                    disabled={processingId === order.id}
+                                    onClick={() => updateStatus(order.id, 'cancelled')}
+                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold disabled:opacity-50"
+                                >
+                                    <XCircle size={16} /> إلغاء
+                                </button>
                             </div>
                         </div>
                     ))}
