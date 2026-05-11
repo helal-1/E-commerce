@@ -48,7 +48,7 @@ export default function WishlistDrawer() {
                             </button>
                         </div>
                     ) : (
-                        wishlist.map((item) => (
+                        wishlist.map((item: any) => (
                             <div key={item.id} className="flex gap-4 p-4 rounded-3xl border border-[#F7F3F0] hover:border-[#EDEAE5] transition-all group">
                                 <div className="w-24 h-32 relative rounded-2xl overflow-hidden shrink-0 border border-[#EDEAE5]">
                                     <Image src={item.image || item.images?.[0]} alt={item.name} fill className="object-cover" />
