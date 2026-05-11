@@ -1,24 +1,50 @@
 "use client";
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Upload, Plus, X, Loader2, Palette } from 'lucide-react';
+import { Upload, Plus, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
 
 export default function AddProduct() {
     const [loading, setLoading] = useState(false);
     const [images, setImages] = useState<File[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
+    const [alert, setAlert] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+        show: false,
+        msg: '',
+        type: 'success'
+    });
+
+    // إغلاق التنبيه تلقائياً بعد 4 ثواني
+    useEffect(() => {
+        if (alert.show) {
+            const timer = setTimeout(() => setAlert({ ...alert, show: false }), 4000);
+            return () => clearTimeout(timer);
+        }
+    }, [alert.show]);
+
+    const showAlert = (msg: string, type: 'success' | 'error') => {
+        setAlert({ show: true, msg, type });
+    };
 
     const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files) {
             const files = Array.from(e.target.files);
             if (images.length + files.length > 3) {
-                alert("أقصى عدد هو 3 صور فقط");
+                showAlert("أقصى عدد هو 3 صور فقط للقطعة الواحدة", 'error');
                 return;
             }
             setImages([...images, ...files]);
             const newPreviews = files.map(file => URL.createObjectURL(file));
             setPreviews([...previews, ...newPreviews]);
         }
+    };
+
+    const removeImage = (index: number) => {
+        const newImages = [...images];
+        const newPreviews = [...previews];
+        newImages.splice(index, 1);
+        newPreviews.splice(index, 1);
+        setImages(newImages);
+        setPreviews(newPreviews);
     };
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -46,7 +72,7 @@ export default function AddProduct() {
                 imageUrls.push(publicUrl);
             }
 
-            // 2. حفظ البيانات مع التأكد من وجود قيم للمقاسات والألوان
+            // 2. حفظ البيانات
             const sizesInput = formData.get('sizes') as string;
             const colorsInput = formData.get('colors') as string;
 
@@ -54,7 +80,7 @@ export default function AddProduct() {
                 name: formData.get('name'),
                 price: parseFloat(formData.get('price') as string),
                 description: formData.get('description'),
-                category: formData.get('category'), // ضفت خانة القسم كمان
+                category: formData.get('category'),
                 images: imageUrls,
                 sizes: sizesInput ? sizesInput.split(',').map(s => s.trim()) : [],
                 colors: colorsInput ? colorsInput.split(',').map(c => c.trim()) : [],
@@ -62,35 +88,60 @@ export default function AddProduct() {
 
             if (dbError) throw dbError;
 
-            alert("تم بنجاح! المنتج الآن في المتجر");
-            setImages([]); setPreviews([]);
+            showAlert("تمت إضافة القطعة بنجاح! تظهر الآن في المتجر", 'success');
+            setImages([]);
+            setPreviews([]);
             (e.target as HTMLFormElement).reset();
 
         } catch (error: any) {
-            alert("خطأ: " + error.message);
+            showAlert("فشل في الإضافة: " + error.message, 'error');
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="max-w-4xl mx-auto space-y-10 py-10" dir="rtl">
-            <h1 className="text-3xl font-black">إضافة منتج جديد</h1>
+        <div className="max-w-4xl mx-auto space-y-12 py-16 px-6" dir="rtl">
 
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div className="space-y-6">
+            {/* Custom Alert Component */}
+            {alert.show && (
+                <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[100] min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'
+                    }`}>
+                    {alert.type === 'success' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-red-500" />}
+                    <p className="text-sm font-bold">{alert.msg}</p>
+                    <button onClick={() => setAlert({ ...alert, show: false })} className="mr-auto opacity-50 hover:opacity-100">
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
+
+            <div className="space-y-2 border-b border-gray-100 pb-8">
+                <h1 className="text-4xl font-serif text-[#4A3E31]">إضافة قطعة فنية</h1>
+                <p className="text-gray-400 font-medium">املئي التفاصيل لإدراج منتج جديد في Zelda Line</p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-12">
+
+                <div className="space-y-8">
                     {/* اختيار الصور */}
-                    <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">صور المنتج (3 صور)</label>
+                    <div className="space-y-4">
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">معرض الصور (3 صور كحد أقصى)</label>
                         <div className="grid grid-cols-3 gap-4">
                             {previews.map((src, i) => (
-                                <div key={i} className="aspect-square bg-gray-100 rounded-2xl overflow-hidden relative border border-gray-100">
-                                    <img src={src} className="w-full h-full object-cover" />
+                                <div key={i} className="aspect-[3/4] bg-gray-50 rounded-2xl overflow-hidden relative border border-gray-100 group">
+                                    <img src={src} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                                    <button
+                                        type="button"
+                                        onClick={() => removeImage(i)}
+                                        className="absolute top-2 left-2 bg-black/50 text-white p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                                    >
+                                        <X size={14} />
+                                    </button>
                                 </div>
                             ))}
                             {previews.length < 3 && (
-                                <label className="aspect-square border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-all">
-                                    <Plus className="text-gray-300" />
+                                <label className="aspect-[3/4] border-2 border-dashed border-gray-200 rounded-2xl flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-black/20 transition-all group">
+                                    <Plus className="text-gray-300 group-hover:text-black transition-colors" />
                                     <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageChange} />
                                 </label>
                             )}
@@ -98,46 +149,53 @@ export default function AddProduct() {
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">اسم المنتج</label>
-                        <input name="name" required placeholder="مثلاً: قميص كتان ملكي" className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">اسم المنتج</label>
+                        <input name="name" required placeholder="مثلاً: عباءة كريب ملكي" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">القسم</label>
-                        <select name="category" className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none cursor-pointer">
-                            <option value="قمصان">قمصان</option>
-                            <option value="بناطيل">بناطيل</option>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">القسم</label>
+                        <select name="category" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none cursor-pointer font-bold text-[#4A3E31]">
                             <option value="فساتين">فساتين</option>
+                            <option value="الأساسيات">الأساسيات</option>
                             <option value="جاكيتات">جاكيتات</option>
+                            <option value="جديد">جديد</option>
                         </select>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">السعر (ر.س)</label>
-                        <input name="price" type="number" required placeholder="0.00" className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">السعر (ج.م)</label>
+                        <input name="price" type="number" required placeholder="0.00" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
                 </div>
 
-                <div className="space-y-6">
-                    {/* خانة الألوان الجديدة */}
+                <div className="space-y-8">
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">الألوان (افصل بينها بفاصلة ,)</label>
-                        <input name="colors" placeholder="black, white, navy" className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5" />
-                        <p className="text-[10px] text-gray-400 font-medium">* اكتب اسم اللون بالإنجليزي (مثل black) عشان يظهر في فلتر المتجر.</p>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">الألوان (افصلي بفاصلة ,)</label>
+                        <input name="colors" placeholder="Black, White, Gold" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
+                        <p className="text-[10px] text-gray-400 font-medium italic">* تظهر الألوان كفلاتر ذكية في المتجر.</p>
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">المقاسات (افصل بينها بفاصلة ,)</label>
-                        <input name="sizes" placeholder="S, M, L, XL" className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">المقاسات (افصلي بفاصلة ,)</label>
+                        <input name="sizes" placeholder="S, M, L, XL" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
 
                     <div className="space-y-2">
-                        <label className="text-sm font-bold text-gray-400">الوصف</label>
-                        <textarea name="description" rows={4} placeholder="وصف القطعة وخامتها..." className="w-full bg-white border border-gray-100 p-4 rounded-2xl outline-none focus:ring-2 focus:ring-black/5" />
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">الوصف الفني</label>
+                        <textarea name="description" rows={5} placeholder="تحدثي عن تفاصيل الخامة، القصة، وفخامة التطريز..." className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31] leading-relaxed" />
                     </div>
 
-                    <button disabled={loading || images.length === 0} className="w-full bg-black text-white py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-zinc-800 disabled:bg-gray-200 transition-all flex items-center justify-center gap-3">
-                        {loading ? <Loader2 className="animate-spin" /> : "نشر المنتج الآن"}
+                    <button
+                        disabled={loading || images.length === 0}
+                        className="w-full bg-[#4A3E31] text-white py-5 rounded-3xl font-black uppercase tracking-widest hover:bg-black disabled:bg-gray-200 transition-all flex items-center justify-center gap-3 shadow-xl shadow-black/10 active:scale-95"
+                    >
+                        {loading ? <Loader2 className="animate-spin" /> : (
+                            <>
+                                <Upload size={18} />
+                                نشر القطعة في المتجر
+                            </>
+                        )}
                     </button>
                 </div>
             </form>

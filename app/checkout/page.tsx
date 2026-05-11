@@ -229,7 +229,7 @@ ${itemsList}
                                             <div className="flex-1 text-right">
                                                 <h4 className="font-bold text-sm">{item.name}</h4>
                                                 <p className="text-[10px] text-gray-400 font-black uppercase">{item.size} | {item.color}</p>
-                                                <p className="text-sm font-black">{item.price} ر.س</p>
+                                                <p className="text-sm font-black">{item.price} ج.م</p>
                                             </div>
                                         </div>
                                     ))}
@@ -237,15 +237,15 @@ ${itemsList}
 
                                 <div className="space-y-4 border-t pt-8 font-bold">
                                     <div className="flex justify-between text-gray-500">
-                                        <span>{subtotal} EGY</span>
+                                        <span>{subtotal} ج.م</span>
                                         <span>المجموع الفرعي</span>
                                     </div>
                                     <div className="flex justify-between text-gray-500">
-                                        <span>{shipping === 0 ? 'مجاني' : `${shipping} EGY`}</span>
+                                        <span>{shipping === 0 ? 'مجاني' : `${shipping} ج.م`}</span>
                                         <span>الشحن</span>
                                     </div>
                                     <div className="flex justify-between text-2xl font-black text-gray-900 pt-4 border-t border-dashed mt-4">
-                                        <span>{total} EGY</span>
+                                        <span>{total} ج.م</span>
                                         <span>الإجمالي</span>
                                     </div>
                                 </div>

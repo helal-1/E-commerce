@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -33,13 +33,11 @@ export default function Home() {
   const [products, setProducts] = useState<Product[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mounted, setMounted] = useState(false);
-
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const [heroTextIndex, setHeroTextIndex] = useState(0);
 
   const heroWords = useMemo(() => ["عفة", "أناقة", "تميز"], []);
 
-  // روابط صور مستقرة وعالية الجودة بدلاً من الروابط التالفة
   const instaImages = useMemo(() => [
     "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800",
     "/herobanner.png",
@@ -55,23 +53,45 @@ export default function Home() {
     return `${CDN_URL}${imagePath}`;
   };
 
+  // دالة جلب البيانات مع تحسين الأداء
+  const fetchProducts = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('id, name, price, images')
+      .limit(8)
+      .order('created_at', { ascending: false });
+
+    if (data) setProducts(data as Product[]);
+    if (error) console.error("Error fetching products:", error);
+  }, []);
+
   useEffect(() => {
     setMounted(true);
-    const fetchProducts = async () => {
-      const { data, error } = await supabase.from('products').select('*').limit(8);
-      if (data) setProducts(data as Product[]);
-      if (error) console.error("Error fetching products:", error);
-    };
     fetchProducts();
+
+    // --- تفعيل الـ Real-time (سحر السرعة) ---
+    const productSubscription = supabase
+      .channel('realtime-products-home')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'products' },
+        () => {
+          fetchProducts(); // إعادة جلب البيانات فور حدوث أي تغيير في الداتابيز
+        }
+      )
+      .subscribe();
 
     const textInterval = setInterval(() => {
       setHeroTextIndex((prev) => (prev + 1) % heroWords.length);
     }, 3000);
 
     const handleMouseMove = (e: MouseEvent) => {
-      setMousePos({
-        x: (e.clientX / window.innerWidth - 0.5) * 15,
-        y: (e.clientY / window.innerHeight - 0.5) * 15,
+      // استخدام requestAnimationFrame لتحسين أداء الأنيميشن مع الماوس
+      window.requestAnimationFrame(() => {
+        setMousePos({
+          x: (e.clientX / window.innerWidth - 0.5) * 15,
+          y: (e.clientY / window.innerHeight - 0.5) * 15,
+        });
       });
     };
 
@@ -84,8 +104,9 @@ export default function Home() {
       window.removeEventListener('scroll', handleScroll);
       window.removeEventListener('mousemove', handleMouseMove);
       clearInterval(textInterval);
+      supabase.removeChannel(productSubscription); // إغلاق القناة عند مغادرة الصفحة
     };
-  }, [heroWords]);
+  }, [heroWords, fetchProducts]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -115,8 +136,6 @@ export default function Home() {
 
       {/* 1. Hero Section (Parallax + Text Fader) */}
       <section ref={heroRef} className="relative w-full h-[100vh] flex items-center justify-center overflow-hidden bg-black">
-
-        {/* 1. الفيديو كخلفية - أعدنا الـ opacity لقوته الأصلية */}
         <div
           className="absolute inset-0 z-0 transition-transform duration-200 ease-out"
           style={{ transform: `translate3d(${mousePos.x}px, ${mousePos.y}px, 0) scale(1.05)` }}
@@ -133,11 +152,8 @@ export default function Home() {
           </video>
         </div>
 
-        {/* 2. طبقة التدرج الداكن (The Cinematic Overlay) */}
-        {/* هذه الطبقة هي التي تعطي تأثير الـ (0,0,0,0.6) الذي طلبته */}
         <div className="absolute inset-0 bg-black/60 z-1 backdrop-blur-[2px]"></div>
 
-        {/* 3. النصوص - حولنا الألوان للأبيض (White) لتعطي تباين خيالي مع السواد */}
         <div className="relative z-10 text-center px-4 max-w-5xl">
           <div className="overflow-hidden h-8 mb-4">
             <p className="text-white/60 uppercase tracking-[0.5em] text-xs md:text-sm font-black transition-all duration-700">
@@ -159,19 +175,16 @@ export default function Home() {
           </p>
 
           <div className="flex flex-col md:flex-row gap-6 justify-center items-center">
-            {/* زر أبيض بنص أسود (Pop effect) */}
             <Link href="/shop" className="group flex items-center gap-4 bg-white text-black px-16 py-5 text-xs font-black uppercase tracking-widest hover:bg-stone-200 transition-all shadow-2xl rounded-full">
               تسوقي الآن <ArrowRight size={16} className="group-hover:translate-x-[-4px] transition-transform" />
             </Link>
 
-            {/* زر شفاف بحدود بيضاء */}
             <Link href="/collections" className="w-full md:w-auto border border-white/30 bg-white/10 backdrop-blur-md text-white px-16 py-5 text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-all rounded-full">
               التشكيلات
             </Link>
           </div>
         </div>
 
-        {/* 4. سهم بسيط للأسفل يوحي بوجود محتوى (اختياري) */}
         <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-10 animate-bounce text-white/30">
           <ChevronLeft className="-rotate-90" size={30} />
         </div>
@@ -217,6 +230,7 @@ export default function Home() {
                 src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800"
                 alt="Main Look"
                 fill
+                priority
                 sizes="(max-width: 768px) 80vw, 40vw"
                 className="object-cover"
               />
@@ -300,7 +314,7 @@ export default function Home() {
                 />
                 <div className="absolute bottom-6 left-6 right-6 translate-y-20 group-hover:translate-y-0 transition-transform duration-500">
                   <div className="bg-white/90 backdrop-blur-md p-4 rounded-2xl flex justify-between items-center shadow-2xl">
-                    <span className="text-xs font-black">{product.price} ر.س</span>
+                    <span className="text-xs font-black">{product.price} ج.م</span>
                     <Plus size={16} />
                   </div>
                 </div>
@@ -372,7 +386,6 @@ export default function Home() {
           </h2>
           <p className="text-xs font-black uppercase tracking-widest text-stone-400 mb-20">— سارة الماجد، عميلة متميزة</p>
 
-          {/* 9. The Atelier Craftsmanship (بديل النشرة البريدية - قسم فني) */}
           <section className="py-32 bg-white px-6">
             <div className="max-w-7xl mx-auto">
               <div className="text-center mb-20 space-y-4">
@@ -390,7 +403,7 @@ export default function Home() {
                   },
                   {
                     step: "02",
-                    title: "القصُّ الهندسي",
+                    title: "القصُّ الهندسي",
                     desc: "بأيدي خبراءٍ يفهمون تفاصيل القوام، نعتمدُ قصاتٍ تمنحكِ الراحةَ التامة دون التنازلِ عن هيبةِ الحضور.",
                     img: "https://images.unsplash.com/photo-1516914943479-89db7d9ae7f2?q=80&w=600"
                   },
@@ -424,7 +437,6 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* زر تفاعلي ينقلك للمتجر */}
               <div className="mt-20 text-center">
                 <Link href="/shop" className="group inline-flex items-center gap-6 px-12 py-6 border border-stone-200 rounded-full hover:bg-black hover:text-white transition-all duration-500">
                   <span className="text-[10px] font-black uppercase tracking-[0.2em]">اكتشفي النتيجة النهائية</span>
