@@ -47,8 +47,8 @@ export default function CartDrawer() {
                                         <img src={item.image || item.images?.[0]} alt={item.name} className="w-full h-full object-cover" />
                                     </div>
 
-                                    <div className="flex-1 flex flex-col justify-between py-1">
-                                        <div className="flex justify-between items-start text-right">
+                                    <div className="flex-1 flex flex-col justify-between py-1 text-right">
+                                        <div className="flex justify-between items-start">
                                             <div className="flex-1">
                                                 <h4 className="font-bold text-sm text-gray-900">{item.name}</h4>
                                                 {/* إظهار المواصفات بوضوح */}
@@ -76,7 +76,7 @@ export default function CartDrawer() {
                                                     <Minus size={14} />
                                                 </button>
                                             </div>
-                                            <p className="font-black text-sm text-gray-900">{item.price * item.quantity} ر.س</p>
+                                            <p className="font-black text-sm text-gray-900">{item.price * item.quantity} ج.م</p>
                                         </div>
                                     </div>
                                 </div>
@@ -89,7 +89,7 @@ export default function CartDrawer() {
                         <div className="p-8 border-t space-y-6 bg-gray-50/50">
                             <div className="flex justify-between items-center font-black text-lg">
                                 <span className="font-serif text-gray-500">المجموع الفرعي</span>
-                                <span>{subtotal} ر.س</span>
+                                <span>{subtotal.toLocaleString()} ج.م</span>
                             </div>
 
                             <button
