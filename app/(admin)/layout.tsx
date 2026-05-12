@@ -43,7 +43,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <div className="flex min-h-screen bg-gray-50" dir="rtl">
 
             {/* زر القائمة للموبايل - يظهر فقط في الشاشات الصغيرة */}
-            <div className="md:hidden fixed top-4 right-4 z-[60]">
+            <div className="md:hidden fixed top-4 right-4 z-[200]">
                 <button
                     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                     className="p-2 bg-black text-white rounded-lg shadow-xl"

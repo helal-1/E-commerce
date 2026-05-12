@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import {
     Plus,
@@ -12,16 +12,23 @@ import {
     CheckCircle2,
     AlertCircle,
     ChevronRight,
-    ChevronLeft
+    ChevronLeft,
+    Tag,
+    Palette,
+    Ruler,
+    LayoutGrid
 } from 'lucide-react';
 
-// تعريف نوع المنتج
+// تحديث نوع المنتج ليشمل الميزات الجديدة
 interface Product {
     id: string;
     name: string;
     price: number;
     category: string;
     images: string[];
+    discount?: number; // الخصم
+    colors?: string[]; // الألوان
+    sizes?: string[];  // المقاسات
     created_at?: string;
 }
 
@@ -30,63 +37,70 @@ export default function ProductsPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
 
-    // نظام التنبيهات المطور
     const [alert, setAlert] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
         show: false,
         msg: '',
         type: 'success'
     });
 
-    // حالات الـ Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const productsPerPage = 4;
 
-    // حالات الـ Edit Modal
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-    // دالة إظهار التنبيه
-    const showAlert = (msg: string, type: 'success' | 'error') => {
+    // حالات مساعدة لإدارة المدخلات المتعددة (الألوان والمقاسات) في التعديل
+    const [colorInput, setColorInput] = useState("");
+    const [sizeInput, setSizeInput] = useState("");
+
+    const showAlert = useCallback((msg: string, type: 'success' | 'error') => {
         setAlert({ show: true, msg, type });
         setTimeout(() => setAlert({ show: false, msg: '', type: 'success' }), 4000);
-    };
+    }, []);
 
     const fetchProducts = useCallback(async () => {
-        setLoading(true);
         const { data, error } = await supabase
             .from('products')
             .select('*')
             .order('created_at', { ascending: false });
 
-        if (!error && data) setProducts(data);
-        setLoading(false);
+        if (error) {
+            console.error("Error fetching products:", error.message);
+            return [];
+        }
+        return (data as Product[]) || [];
     }, []);
 
     useEffect(() => {
-        fetchProducts();
+        let isMounted = true;
+        const loadData = async () => {
+            setLoading(true);
+            const data = await fetchProducts();
+            if (isMounted) {
+                setProducts(data);
+                setLoading(false);
+            }
+        };
+        loadData();
 
         const productsChannel = supabase
             .channel('realtime-products')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'products' },
-                (payload) => {
-                    if (payload.eventType === 'INSERT') {
-                        setProducts((prev) => [payload.new as Product, ...prev]);
-                    }
-                    else if (payload.eventType === 'UPDATE') {
-                        setProducts((prev) =>
-                            prev.map(p => p.id === payload.new.id ? (payload.new as Product) : p)
-                        );
-                    }
-                    else if (payload.eventType === 'DELETE') {
-                        setProducts((prev) => prev.filter(p => p.id !== payload.old.id));
-                    }
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'products' }, (payload) => {
+                if (!isMounted) return;
+                if (payload.eventType === 'INSERT') {
+                    setProducts((prev) => [payload.new as Product, ...prev]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setProducts((prev) =>
+                        prev.map(p => p.id === payload.new.id ? (payload.new as Product) : p)
+                    );
+                } else if (payload.eventType === 'DELETE') {
+                    setProducts((prev) => prev.filter(p => p.id !== payload.old.id));
                 }
-            )
+            })
             .subscribe();
 
         return () => {
+            isMounted = false;
             supabase.removeChannel(productsChannel);
         };
     }, [fetchProducts]);
@@ -104,20 +118,22 @@ export default function ProductsPage() {
             .update({
                 name: editingProduct.name,
                 price: editingProduct.price,
-                category: editingProduct.category
+                category: editingProduct.category,
+                discount: editingProduct.discount,
+                colors: editingProduct.colors,
+                sizes: editingProduct.sizes
             })
             .eq('id', editingProduct.id);
 
         if (!error) {
             setIsEditModalOpen(false);
-            showAlert("تم تحديث بيانات القطعة بنجاح", 'success');
+            showAlert("تم تحديث بيانات القطعة والخصائص الجديدة بنجاح", 'success');
         } else {
             showAlert("فشل التحديث: " + error.message, 'error');
         }
     };
 
     const deleteProduct = async (id: string) => {
-        // بديل لـ confirm باستخدام التنبيه المخصص أو تأكيد بسيط
         const { error } = await supabase.from('products').delete().eq('id', id);
         if (error) {
             showAlert("خطأ في الحذف: " + error.message, 'error');
@@ -126,12 +142,10 @@ export default function ProductsPage() {
         }
     };
 
-    // فلترة المنتجات بناءً على البحث
     const filteredProducts = products.filter(product =>
         product.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // حسابات الترقيم (Pagination Logic)
     const indexOfLastProduct = currentPage * productsPerPage;
     const indexOfFirstProduct = indexOfLastProduct - productsPerPage;
     const currentProducts = filteredProducts.slice(indexOfFirstProduct, indexOfLastProduct);
@@ -142,14 +156,33 @@ export default function ProductsPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
+    // دوال لإدارة مصفوفات الألوان والمقاسات داخل الـ Modal
+    const addColor = () => {
+        if (colorInput && editingProduct) {
+            const currentColors = editingProduct.colors || [];
+            if (!currentColors.includes(colorInput)) {
+                setEditingProduct({ ...editingProduct, colors: [...currentColors, colorInput] });
+            }
+            setColorInput("");
+        }
+    };
+
+    const addSize = () => {
+        if (sizeInput && editingProduct) {
+            const currentSizes = editingProduct.sizes || [];
+            if (!currentSizes.includes(sizeInput)) {
+                setEditingProduct({ ...editingProduct, sizes: [...currentSizes, sizeInput] });
+            }
+            setSizeInput("");
+        }
+    };
+
     return (
-        <div className="p-4 md:p-8 bg-[#FCFBF9] min-h-screen relative" dir="rtl">
+        <div className="p-4 md:p-8 bg-[#FCFBF9] min-h-screen relative text-right" dir="rtl">
             <div className="max-w-7xl mx-auto">
 
-                {/* نظام التنبيهات المخصص (Custom Toast) */}
                 {alert.show && (
-                    <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[100] min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'
-                        }`}>
+                    <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[100] min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'}`}>
                         {alert.type === 'success' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-red-500" />}
                         <p className="text-sm font-bold flex-1">{alert.msg}</p>
                         <button onClick={() => setAlert({ ...alert, show: false })} className="opacity-50 hover:opacity-100 transition-opacity">
@@ -178,7 +211,7 @@ export default function ProductsPage() {
                         className="w-full pr-12 pl-4 py-4 bg-white border border-[#EDEAE5] rounded-3xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 transition-all shadow-sm font-medium"
                         onChange={(e) => {
                             setSearchTerm(e.target.value);
-                            setCurrentPage(1); // العودة للصفحة الأولى عند البحث
+                            setCurrentPage(1);
                         }}
                     />
                 </div>
@@ -201,11 +234,25 @@ export default function ProductsPage() {
                                 <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-[#4A3E31] tracking-widest shadow-sm">
                                     {product.category}
                                 </div>
+                                {product.discount && product.discount > 0 && (
+                                    <div className="absolute top-4 right-4 bg-red-500 text-white px-3 py-1 rounded-full text-[10px] font-bold shadow-lg animate-pulse">
+                                        خصم {product.discount}%
+                                    </div>
+                                )}
                             </div>
 
-                            <div className="p-6 text-right">
+                            <div className="p-6">
                                 <h3 className="font-serif text-xl text-[#4A3E31] mb-1 truncate">{product.name}</h3>
-                                <p className="text-[#8B735B] text-sm font-black mb-6">{product.price.toLocaleString()} ج.م</p>
+                                <div className="flex items-center gap-2 mb-6">
+                                    <p className={`text-[#8B735B] text-sm font-black ${product.discount ? 'line-through opacity-50' : ''}`}>
+                                        {product.price.toLocaleString()} ج.م
+                                    </p>
+                                    {product.discount && (
+                                        <p className="text-red-600 text-sm font-black">
+                                            {(product.price - (product.price * product.discount / 100)).toLocaleString()} ج.م
+                                        </p>
+                                    )}
+                                </div>
 
                                 <div className="flex items-center gap-2 pt-4 border-t border-[#F7F3F0]">
                                     <button
@@ -226,7 +273,7 @@ export default function ProductsPage() {
                     ))}
                 </div>
 
-                {/* Pagination Controls */}
+                {/* Pagination */}
                 {!loading && totalPages > 1 && (
                     <div className="flex justify-center items-center gap-4 mt-16 pb-10">
                         <button
@@ -236,22 +283,17 @@ export default function ProductsPage() {
                         >
                             <ChevronRight size={20} />
                         </button>
-
                         <div className="flex gap-2">
                             {[...Array(totalPages)].map((_, i) => (
                                 <button
                                     key={i + 1}
                                     onClick={() => paginate(i + 1)}
-                                    className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${currentPage === i + 1
-                                            ? 'bg-[#4A3E31] text-white shadow-lg'
-                                            : 'bg-white text-[#8B735B] border border-[#EDEAE5] hover:border-[#8B735B]'
-                                        }`}
+                                    className={`w-10 h-10 rounded-xl text-xs font-black transition-all ${currentPage === i + 1 ? 'bg-[#4A3E31] text-white shadow-lg' : 'bg-white text-[#8B735B] border border-[#EDEAE5] hover:border-[#8B735B]'}`}
                                 >
                                     {i + 1}
                                 </button>
                             ))}
                         </div>
-
                         <button
                             disabled={currentPage === totalPages}
                             onClick={() => paginate(currentPage + 1)}
@@ -261,48 +303,125 @@ export default function ProductsPage() {
                         </button>
                     </div>
                 )}
-
-                {filteredProducts.length === 0 && !loading && (
-                    <div className="text-center py-24 bg-white rounded-4xl border border-dashed border-[#EDEAE5]">
-                        <p className="text-[#8B735B] font-serif italic">لا توجد قطع فنية تطابق هذا البحث.</p>
-                    </div>
-                )}
             </div>
 
-            {/* --- Edit Modal --- */}
+            {/* Edit Modal المطور */}
             {isEditModalOpen && (
-                <div className="fixed inset-0 bg-[#4A3E31]/40 backdrop-blur-md z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-4xl p-8 md:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300">
+                <div className="fixed inset-0 bg-[#4A3E31]/40 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white w-full max-w-2xl rounded-4xl p-6 md:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
                         <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 left-6 text-[#8B735B] hover:text-[#4A3E31] transition-colors">
                             <X size={24} />
                         </button>
 
-                        <h2 className="text-2xl font-serif text-[#4A3E31] mb-8 text-right">تعديل القطعة الفنية</h2>
+                        <h2 className="text-2xl font-serif text-[#4A3E31] mb-8 border-b pb-4">تعديل بيانات القطعة الفنية</h2>
 
-                        <div className="space-y-6">
-                            <div className="space-y-2 text-right">
-                                <label className="text-xs font-black text-[#A6998A] mr-2">اسم المنتج</label>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            {/* الاسم */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
+                                    <Tag size={14} /> اسم المنتج
+                                </label>
                                 <input
                                     type="text"
                                     value={editingProduct?.name || ''}
                                     onChange={(e) => editingProduct && setEditingProduct({ ...editingProduct, name: e.target.value })}
-                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 text-right font-bold text-[#4A3E31]"
+                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 font-bold text-[#4A3E31]"
                                 />
                             </div>
-                            <div className="space-y-2 text-right">
-                                <label className="text-xs font-black text-[#A6998A] mr-2">السعر (ج.م)</label>
+
+                            {/* القسم */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
+                                    <LayoutGrid size={14} /> القسم
+                                </label>
+                                <select
+                                    value={editingProduct?.category || ''}
+                                    onChange={(e) => editingProduct && setEditingProduct({ ...editingProduct, category: e.target.value })}
+                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 font-bold text-[#4A3E31]"
+                                >
+                                    <option value="فساتين">فساتين</option>
+                                    <option value="عبايات">عبايات</option>
+                                    <option value="ملابس كاجوال">ملابس كاجوال</option>
+                                    <option value="إكسسوارات">إكسسوارات</option>
+                                </select>
+                            </div>
+
+                            {/* السعر */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-[#A6998A] mr-2">السعر الأصلي</label>
                                 <input
                                     type="number"
                                     value={editingProduct?.price || 0}
                                     onChange={(e) => editingProduct && setEditingProduct({ ...editingProduct, price: Number(e.target.value) })}
-                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 text-right font-bold text-[#4A3E31]"
+                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 font-bold text-[#4A3E31]"
                                 />
                             </div>
 
-                            <button onClick={handleUpdateProduct} className="w-full bg-[#4A3E31] text-white py-5 rounded-2xl font-bold mt-4 hover:bg-black transition-all shadow-lg shadow-[#4A3E31]/20">
-                                حفظ التغييرات الفنية
-                            </button>
+                            {/* الخصم */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-[#A6998A] mr-2">نسبة الخصم (%)</label>
+                                <input
+                                    type="number"
+                                    value={editingProduct?.discount || 0}
+                                    onChange={(e) => editingProduct && setEditingProduct({ ...editingProduct, discount: Number(e.target.value) })}
+                                    className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-red-200 font-bold text-red-600"
+                                />
+                            </div>
+
+                            {/* الألوان */}
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
+                                    <Palette size={14} /> الألوان المتوفرة
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="مثال: أسود ملكي"
+                                        value={colorInput}
+                                        onChange={(e) => setColorInput(e.target.value)}
+                                        className="flex-1 bg-[#FCFBF9] border border-[#EDEAE5] p-3 rounded-xl outline-none"
+                                    />
+                                    <button onClick={addColor} className="bg-[#8B735B] text-white px-4 rounded-xl">إضافة</button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {editingProduct?.colors?.map(color => (
+                                        <span key={color} className="bg-white border px-3 py-1 rounded-full text-xs flex items-center gap-2">
+                                            {color}
+                                            <X size={12} className="cursor-pointer text-red-400" onClick={() => setEditingProduct({ ...editingProduct, colors: editingProduct.colors?.filter(c => c !== color) })} />
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* المقاسات */}
+                            <div className="space-y-2 md:col-span-2">
+                                <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
+                                    <Ruler size={14} /> المقاسات المتاحة
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        placeholder="مثال: XL"
+                                        value={sizeInput}
+                                        onChange={(e) => setSizeInput(e.target.value)}
+                                        className="flex-1 bg-[#FCFBF9] border border-[#EDEAE5] p-3 rounded-xl outline-none"
+                                    />
+                                    <button onClick={addSize} className="bg-[#8B735B] text-white px-4 rounded-xl">إضافة</button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {editingProduct?.sizes?.map(size => (
+                                        <span key={size} className="bg-white border px-3 py-1 rounded-full text-xs flex items-center gap-2">
+                                            {size}
+                                            <X size={12} className="cursor-pointer text-red-400" onClick={() => setEditingProduct({ ...editingProduct, sizes: editingProduct.sizes?.filter(s => s !== size) })} />
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
                         </div>
+
+                        <button onClick={handleUpdateProduct} className="w-full bg-[#4A3E31] text-white py-5 rounded-2xl font-bold mt-10 hover:bg-black transition-all shadow-lg shadow-[#4A3E31]/20">
+                            تحديث كافة بيانات القطعة
+                        </button>
                     </div>
                 </div>
             )}

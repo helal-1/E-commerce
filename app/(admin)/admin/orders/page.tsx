@@ -8,22 +8,34 @@ import {
     XCircle,
     Search,
     User,
-    MapPin,
     CreditCard,
-    Loader2
+    Loader2,
+    Eye,
+    X
 } from 'lucide-react';
+
+// تعريف الأنواع بدقة لمنع أخطاء الـ Any
+interface OrderItem {
+    name: string;
+    image?: string;
+    images?: string[];
+    size: string;
+    color: string;
+    quantity: number;
+    price: number;
+}
 
 interface Order {
     id: string;
     created_at: string;
     customer_name: string;
     customer_phone: string;
-    customer_email?: string; // أضفت حقل الإيميل هنا
+    customer_email?: string;
     city: string;
     address: string;
     total_price: number;
     status: string;
-    items?: any[];
+    items?: OrderItem[];
 }
 
 export default function OrdersPage() {
@@ -31,274 +43,221 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [processingId, setProcessingId] = useState<string | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); // مودال التفاصيل
 
-    // دالة إرسال إشعار للنظام (إشعار الموبايل/الديسك توب)
-    const sendSystemNotification = (order: Order) => {
-        if (!("Notification" in window)) return;
-
-        if (Notification.permission === "granted") {
-            const notification = new Notification("Zelda Line - طلب جديد! ✨", {
-                body: `وصل طلب جديد من ${order.customer_name} بقيمة ${order.total_price} ج.م`,
-                icon: "/favicon.ico",
-                badge: "/favicon.ico",
-                tag: "new-order"
+    // نظام إشعارات الديسك توب
+    const sendSystemNotification = useCallback((order: Order) => {
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+            new Notification("طلب جديد من Zelda Line! ✨", {
+                body: `العميل ${order.customer_name} طلب منتجات بقيمة ${order.total_price} ج.م`,
+                icon: "/favicon.ico"
             });
-
-            notification.onclick = () => {
-                window.focus();
-                notification.close();
-            };
         }
-    };
+    }, []);
 
     const fetchOrders = useCallback(async () => {
-        setLoading(true);
         const { data, error } = await supabase
             .from('orders')
             .select('*')
             .order('created_at', { ascending: false });
 
-        if (!error && data) setOrders(data);
-        setLoading(false);
+        if (error) return [];
+        return (data as Order[]) || [];
     }, []);
 
     useEffect(() => {
-        // طلب إذن الإشعارات عند فتح الصفحة
-        if ("Notification" in window && Notification.permission !== "granted") {
+        let isMounted = true;
+        if (typeof window !== "undefined" && "Notification" in window) {
             Notification.requestPermission();
         }
 
-        fetchOrders();
+        const loadData = async () => {
+            setLoading(true);
+            const data = await fetchOrders();
+            if (isMounted) {
+                setOrders(data);
+                setLoading(false);
+            }
+        };
+
+        loadData();
 
         const ordersChannel = supabase
             .channel('realtime-orders-admin')
-            .on(
-                'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'orders' },
-                (payload) => {
-                    const newOrder = payload.new as Order;
-                    setOrders((prev) => [newOrder, ...prev]);
-                    sendSystemNotification(newOrder);
-
-                    // صوت تنبيه خفيف
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
-                    audio.play().catch(() => { });
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'orders' },
-                (payload) => {
-                    setOrders((prev) =>
-                        prev.map((order) =>
-                            order.id === payload.new.id ? (payload.new as Order) : order
-                        )
-                    );
-                }
-            )
-            .on(
-                'postgres_changes',
-                { event: 'DELETE', schema: 'public', table: 'orders' },
-                (payload) => {
-                    setOrders((prev) => prev.filter((o) => o.id !== payload.old.id));
-                }
-            )
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+                if (!isMounted) return;
+                const newOrder = payload.new as Order;
+                setOrders((prev) => [newOrder, ...prev]);
+                sendSystemNotification(newOrder);
+                new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3').play().catch(() => { });
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                loadData(); // تحديث القائمة في أي تغيير آخر
+            })
             .subscribe();
 
         return () => {
+            isMounted = false;
             supabase.removeChannel(ordersChannel);
         };
-    }, [fetchOrders]);
+    }, [fetchOrders, sendSystemNotification]);
 
     const updateStatus = async (orderId: string, newStatus: string) => {
         setProcessingId(orderId);
-
         const { data, error } = await supabase
             .from('orders')
             .update({ status: newStatus })
             .eq('id', orderId)
-            .select()
-            .single();
+            .select().single();
 
-        if (error) {
-            alert("خطأ في التحديث: " + error.message);
-            setProcessingId(null);
-            return;
-        }
-
-        if (data) {
-            // تحديث الواجهة فوراً
-            setOrders(prevOrders =>
-                prevOrders.map(order => order.id === orderId ? { ...order, status: newStatus } : order)
-            );
-
-            // إذا تم الاعتماد (Completed)، نرسل الإيميل التلقائي عبر الـ API الجديد
+        if (!error && data) {
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
             if (newStatus === 'completed') {
-                try {
-                    await fetch('/api/send', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            customerName: data.customer_name,
-                            customerEmail: data.customer_email || 'no-email@provided.com',
-                            orderId: data.id,
-                            totalPrice: data.total_price
-                        }),
-                    });
-                    console.log("تم إرسال إيميل التأكيد بنجاح");
-                } catch (err) {
-                    console.error("فشل إرسال الإيميل:", err);
-                }
+                await fetch('/api/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        customerName: data.customer_name,
+                        customerEmail: data.customer_email || 'no-email@provided.com',
+                        orderId: data.id,
+                        totalPrice: data.total_price
+                    }),
+                });
             }
         }
         setProcessingId(null);
+        setSelectedOrder(null);
     };
 
     const filteredOrders = orders.filter(order => {
-        const name = order.customer_name?.toLowerCase() || "";
-        const phone = order.customer_phone || "";
-        const matchesSearch = name.includes(searchTerm.toLowerCase()) || phone.includes(searchTerm);
-        const isPending = order.status === 'pending';
-        return matchesSearch && isPending;
+        const matchesSearch = order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            order.customer_phone.includes(searchTerm);
+        return matchesSearch && order.status === 'pending';
     });
 
     return (
-        <div className="p-4 md:p-8 bg-[#FAFAFA] min-h-screen" dir="rtl">
+        <div className="p-4 md:p-8 bg-[#FAFAFA] min-h-screen text-right font-sans" dir="rtl">
             <div className="max-w-7xl mx-auto">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+                <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                     <div>
-                        <h1 className="text-2xl md:text-3xl font-black text-gray-900 leading-tight tracking-tighter">إدارة الطلبات</h1>
-                        <p className="text-gray-500 mt-1 font-medium text-sm">تصلك إشعارات النظام فور وصول طلب جديد.</p>
+                        <h1 className="text-3xl font-black text-gray-900 tracking-tighter">إدارة الطلبات</h1>
+                        <p className="text-gray-500 mt-1 font-medium text-sm">متابعة الطلبات الجديدة الواردة للمتجر.</p>
                     </div>
-
                     <div className="relative w-full md:w-80">
                         <Search className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                         <input
                             type="text"
                             placeholder="بحث باسم العميل أو الرقم..."
-                            className="w-full pr-10 pl-4 py-3 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all shadow-sm"
+                            className="w-full pr-10 pl-4 py-3 bg-white border border-gray-100 rounded-2xl outline-none focus:ring-2 focus:ring-black/5 transition-all shadow-sm font-bold text-sm"
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
                     </div>
-                </div>
+                </header>
 
-                {/* Desktop View Table */}
-                <div className="hidden md:block bg-white rounded-4xl border border-gray-100 shadow-sm overflow-hidden">
-                    <table className="w-full text-right">
-                        <thead className="bg-gray-50 border-b border-gray-100">
-                            <tr>
-                                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-right">الطلب</th>
-                                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-right">العميل</th>
-                                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-right">التفاصيل</th>
-                                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-right">الإجمالي</th>
-                                <th className="p-6 text-xs font-black text-gray-400 uppercase tracking-widest text-center">إجراءات</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-gray-50">
-                            {loading ? (
-                                <tr><td colSpan={5} className="p-10 text-center text-gray-400 font-bold">جاري التحميل...</td></tr>
-                            ) : filteredOrders.map((order) => (
-                                <tr key={order.id} className="hover:bg-gray-50/50 transition-colors animate-in fade-in duration-500">
-                                    <td className="p-6">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 bg-black/5 rounded-xl flex items-center justify-center text-black">
-                                                <Package size={20} />
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-sm">#{order.id.slice(0, 8)}</p>
-                                                <p className="text-[10px] text-gray-400 font-bold">
-                                                    {new Date(order.created_at).toLocaleDateString('ar-EG')}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    </td>
-                                    <td className="p-6 font-bold text-sm">
-                                        {order.customer_name}<br />
-                                        <span className="text-xs text-gray-400 font-medium">{order.customer_phone}</span>
-                                    </td>
-                                    <td className="p-6">
-                                        <p className="text-xs text-gray-600 truncate max-w-50 font-medium">{order.city} - {order.address}</p>
-                                        <p className="text-[10px] font-black text-black mt-1">{order.items?.length || 0} منتجات</p>
-                                    </td>
-                                    <td className="p-6 font-black text-sm text-gray-900">{order.total_price} EGP</td>
-                                    <td className="p-6">
-                                        <div className="flex justify-center gap-2">
-                                            {processingId === order.id ? (
-                                                <Loader2 className="animate-spin text-gray-400" size={20} />
-                                            ) : (
-                                                <>
-                                                    <button
-                                                        onClick={() => updateStatus(order.id, 'completed')}
-                                                        title="اعتماد وإرسال إيميل"
-                                                        className="p-2 bg-green-50 text-green-600 rounded-xl hover:bg-green-600 hover:text-white transition-all"
-                                                    >
-                                                        <CheckCircle2 size={18} />
-                                                    </button>
-                                                    <button
-                                                        onClick={() => updateStatus(order.id, 'cancelled')}
-                                                        className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-600 hover:text-white transition-all"
-                                                    >
-                                                        <XCircle size={18} />
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                </div>
-
-                {/* Mobile View Cards */}
-                <div className="md:hidden space-y-4">
+                <div className="grid gap-4">
                     {loading ? (
-                        <div className="text-center p-10 text-gray-400 font-bold">جاري التحميل...</div>
+                        <div className="flex justify-center py-20"><Loader2 className="animate-spin text-gray-300" size={40} /></div>
                     ) : filteredOrders.map((order) => (
-                        <div key={order.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm space-y-4 animate-in slide-in-from-bottom-4 duration-500">
-                            <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <span className="p-2 bg-black/5 rounded-lg text-black"><Package size={16} /></span>
-                                    <span className="font-black text-sm">#{order.id.slice(0, 8)}</span>
+                        <div key={order.id} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm flex flex-col md:flex-row justify-between items-center gap-4 hover:border-black/10 transition-all">
+                            <div className="flex items-center gap-4 flex-1">
+                                <div className="w-12 h-12 bg-black/5 rounded-2xl flex items-center justify-center text-black">
+                                    <Package size={24} />
                                 </div>
-                                <span className="text-[10px] bg-orange-50 text-orange-600 px-3 py-1 rounded-full font-black">قيد الانتظار</span>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 py-2 border-y border-gray-50 text-right">
-                                <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><User size={10} /> العميل</p>
-                                    <p className="text-xs font-bold">{order.customer_name}</p>
-                                </div>
-                                <div className="space-y-1">
-                                    <p className="text-[10px] text-gray-400 font-bold flex items-center gap-1"><CreditCard size={10} /> المبلغ</p>
-                                    <p className="text-xs font-black">{order.total_price} EGP</p>
+                                <div>
+                                    <h3 className="font-black text-sm text-gray-900">#{order.id.slice(0, 8)} - {order.customer_name}</h3>
+                                    <p className="text-xs text-gray-400 font-bold">{order.city} | {order.total_price} ج.م</p>
                                 </div>
                             </div>
 
-                            <div className="flex gap-2 pt-2">
+                            <div className="flex gap-2 w-full md:w-auto">
                                 <button
-                                    disabled={processingId === order.id}
-                                    onClick={() => updateStatus(order.id, 'completed')}
-                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
+                                    onClick={() => setSelectedOrder(order)}
+                                    className="flex-1 md:flex-none px-4 py-3 bg-gray-50 text-gray-600 rounded-xl text-xs font-black flex items-center justify-center gap-2 hover:bg-gray-100 transition-colors"
                                 >
-                                    {processingId === order.id ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle2 size={16} /> اعتماد</>}
+                                    <Eye size={16} /> التفاصيل
                                 </button>
                                 <button
                                     disabled={processingId === order.id}
-                                    onClick={() => updateStatus(order.id, 'cancelled')}
-                                    className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-50 text-red-600 rounded-xl text-xs font-bold disabled:opacity-50"
+                                    onClick={() => updateStatus(order.id, 'completed')}
+                                    className="flex-1 md:flex-none px-6 py-3 bg-black text-white rounded-xl text-xs font-black hover:bg-zinc-800 transition-all disabled:opacity-50 shadow-lg shadow-black/10"
                                 >
-                                    <XCircle size={16} /> إلغاء
+                                    {processingId === order.id ? <Loader2 className="animate-spin" size={16} /> : "اعتماد الطلب"}
+                                </button>
+                                <button
+                                    onClick={() => updateStatus(order.id, 'cancelled')}
+                                    className="p-3 bg-red-50 text-red-500 rounded-xl hover:bg-red-500 hover:text-white transition-all"
+                                >
+                                    <XCircle size={18} />
                                 </button>
                             </div>
                         </div>
                     ))}
                 </div>
 
-                {filteredOrders.length === 0 && !loading && (
-                    <div className="text-center py-20 bg-white rounded-4xl border border-gray-50 mt-4">
-                        <Package size={48} className="mx-auto text-gray-200 mb-4" />
-                        <p className="text-gray-400 font-bold">لا توجد طلبات جديدة بانتظارك حالياً</p>
+                {/* --- نافذة تفاصيل المنتجات (Modal) --- */}
+                {selectedOrder && (
+                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
+                        <div className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+                            <div className="p-8 border-b flex justify-between items-center bg-gray-50/50">
+                                <h2 className="text-xl font-black text-gray-900">مراجعة الطلبية #{selectedOrder.id.slice(0, 8)}</h2>
+                                <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={20} /></button>
+                            </div>
+
+                            <div className="p-8 overflow-y-auto max-h-[70vh]">
+                                <div className="grid grid-cols-2 gap-8 mb-10 bg-gray-50 p-6 rounded-3xl border border-gray-100">
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">معلومات المستلم</p>
+                                        <p className="text-sm font-black">{selectedOrder.customer_name}</p>
+                                        <p className="text-xs text-gray-500 font-bold">{selectedOrder.customer_phone}</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">مكان التوصيل</p>
+                                        <p className="text-sm font-black">{selectedOrder.city}</p>
+                                        <p className="text-xs text-gray-500 font-bold">{selectedOrder.address}</p>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">القطع المختارة</p>
+                                    {selectedOrder.items?.map((item, index) => (
+                                        <div key={index} className="flex gap-4 p-4 border border-gray-50 rounded-2xl bg-white hover:border-black/5 transition-all">
+                                            <div className="w-20 h-24 bg-gray-100 rounded-xl overflow-hidden shrink-0">
+                                                <img src={item.image || item.images?.[0]} className="w-full h-full object-cover" alt={item.name} />
+                                            </div>
+                                            <div className="flex-1 py-1">
+                                                <h4 className="font-black text-sm text-gray-900">{item.name}</h4>
+                                                <div className="flex gap-3 mt-2">
+                                                    <span className="text-[10px] font-black px-2 py-1 bg-gray-50 rounded-md border text-gray-400 uppercase">Size: {item.size}</span>
+                                                    <span className="text-[10px] font-black px-2 py-1 bg-gray-50 rounded-md border text-amber-900/40 uppercase">Color: {item.color}</span>
+                                                </div>
+                                                <p className="text-xs font-black mt-3 text-gray-900">{item.price} ج.م × {item.quantity}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="mt-10 pt-6 border-t flex flex-col md:flex-row justify-between items-center gap-4">
+                                    <div className="text-right">
+                                        <p className="text-[10px] font-black text-gray-400 uppercase">إجمالي الحساب</p>
+                                        <p className="text-2xl font-black text-gray-900">{selectedOrder.total_price} EGP</p>
+                                    </div>
+                                    <button
+                                        onClick={() => updateStatus(selectedOrder.id, 'completed')}
+                                        className="w-full md:w-auto px-10 py-5 bg-black text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-zinc-800 transition-all shadow-xl shadow-black/10"
+                                    >
+                                        اعتماد الطلبية الآن
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {!loading && filteredOrders.length === 0 && (
+                    <div className="text-center py-32 bg-white rounded-[3rem] border border-dashed border-gray-100">
+                        <CheckCircle2 size={48} className="mx-auto text-gray-100 mb-4" />
+                        <p className="text-gray-400 font-bold">لا توجد طلبات جديدة حالياً.</p>
                     </div>
                 )}
             </div>

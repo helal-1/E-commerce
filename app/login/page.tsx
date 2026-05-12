@@ -24,8 +24,13 @@ export default function AuthPage() {
     const [mounted, setMounted] = useState(false);
     const router = useRouter();
 
+    // حل مشكلة الـ setState في الـ Effect
     useEffect(() => {
-        setMounted(true);
+        let isAlive = true;
+        if (isAlive) {
+            setMounted(true);
+        }
+        return () => { isAlive = false; };
     }, []);
 
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -55,7 +60,6 @@ export default function AuthPage() {
                         .single();
 
                     if (profileError) {
-                        // لو المستخدم لسه ملوش بروفايل (حالة نادرة بعد الـ Trigger)
                         router.push('/');
                     } else {
                         toast.success('تم تسجيل الدخول بنجاح', {
@@ -72,14 +76,14 @@ export default function AuthPage() {
                 }
 
             } else {
-                // إنشاء حساب جديد - لاحظ إرسال full_name في الـ user_metadata
+                // إنشاء حساب جديد
                 const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
                     email,
                     password,
                     options: {
                         data: {
-                            full_name: fullName, // هذا هو المفتاح الذي يقرأه الـ Trigger
-                            display_name: fullName // إضافة زيادة للأمان
+                            full_name: fullName,
+                            display_name: fullName
                         }
                     }
                 });
@@ -93,9 +97,10 @@ export default function AuthPage() {
                     setIsLogin(true);
                 }
             }
-        } catch (error: any) {
+        } catch (error: unknown) { // حل مشكلة الـ any هنا
+            const errorMessage = error instanceof Error ? error.message : 'حدث خطأ غير متوقع';
             toast.error('حدث خطأ', {
-                description: error.message || 'يرجى المحاولة مرة أخرى',
+                description: errorMessage || 'يرجى المحاولة مرة أخرى',
             });
         } finally {
             setLoading(false);
@@ -105,7 +110,7 @@ export default function AuthPage() {
     if (!mounted) return null;
 
     return (
-        <main className="min-h-screen bg-[#FCFBF9] flex items-center justify-center p-6" dir="rtl">
+        <main className="min-h-screen bg-[#FCFBF9] flex items-center justify-center p-6 text-right font-sans" dir="rtl">
             <Toaster position="top-center" dir="rtl" richColors />
 
             <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-4xl shadow-sm border border-[#EDEAE5]">
@@ -122,7 +127,7 @@ export default function AuthPage() {
 
                 <form onSubmit={handleSubmit} className="space-y-6">
                     {!isLogin && (
-                        <div className="space-y-2 text-right">
+                        <div className="space-y-2">
                             <label className="text-xs font-black text-[#A6998A] mr-2">الاسم الكامل</label>
                             <div className="relative">
                                 <input
@@ -137,7 +142,7 @@ export default function AuthPage() {
                         </div>
                     )}
 
-                    <div className="space-y-2 text-right">
+                    <div className="space-y-2">
                         <label className="text-xs font-black text-[#A6998A] mr-2">البريد الإلكتروني</label>
                         <div className="relative">
                             <input
@@ -151,7 +156,7 @@ export default function AuthPage() {
                         </div>
                     </div>
 
-                    <div className="space-y-2 text-right">
+                    <div className="space-y-2">
                         <label className="text-xs font-black text-[#A6998A] mr-2">كلمة المرور</label>
                         <div className="relative">
                             <input

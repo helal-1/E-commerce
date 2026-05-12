@@ -3,17 +3,28 @@ import { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image'; // استيراد مكون الصورة المطور
 import {
     MapPin,
     Phone,
     User,
     Mail,
-    CreditCard,
     ArrowRight,
     CheckCircle2,
     ShoppingBag,
     Truck
 } from 'lucide-react';
+
+// تعريف الأنواع لمنع خطأ any
+interface CartItem {
+    id: string;
+    name: string;
+    price: number;
+    quantity: number;
+    image: string;
+    size: string;
+    color: string;
+}
 
 export default function CheckoutPage() {
     const { cartItems, subtotal, clearCart } = useCart();
@@ -21,7 +32,6 @@ export default function CheckoutPage() {
     const [loading, setLoading] = useState(false);
     const [orderCompleted, setOrderCompleted] = useState(false);
 
-    // الحقول كاملة بما فيها الإيميل الجديد
     const [formData, setFormData] = useState({
         name: '',
         phone: '',
@@ -37,8 +47,7 @@ export default function CheckoutPage() {
         setLoading(true);
 
         try {
-            // إرسال البيانات كاملة لجدول orders
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('orders')
                 .insert([{
                     customer_name: formData.name,
@@ -48,28 +57,27 @@ export default function CheckoutPage() {
                     address: formData.address,
                     total_price: subtotal,
                     status: 'pending',
-                    items: cartItems // حفظ المنتجات المختارة
+                    items: cartItems
                 }])
                 .select();
 
             if (error) throw error;
 
             setOrderCompleted(true);
-            clearCart(); // تفريغ السلة بعد النجاح
+            clearCart();
 
-            // العودة للرئيسية بعد 5 ثواني
             setTimeout(() => {
                 router.push('/');
             }, 5000);
 
-        } catch (error: any) {
-            alert("حدث خطأ أثناء إتمام الطلب: " + error.message);
+        } catch (error: unknown) {
+            const err = error as Error;
+            alert("حدث خطأ أثناء إتمام الطلب: " + err.message);
         } finally {
             setLoading(false);
         }
     };
 
-    // واجهة نجاح الطلب
     if (orderCompleted) {
         return (
             <div className="min-h-screen bg-white flex items-center justify-center p-4" dir="rtl">
@@ -92,8 +100,7 @@ export default function CheckoutPage() {
     }
 
     return (
-        <div className="min-h-screen bg-[#FAFAFA] pb-20" dir="rtl">
-            {/* Header */}
+        <div className="min-h-screen bg-[#FAFAFA] pb-20 font-sans" dir="rtl">
             <div className="bg-white border-b sticky top-0 z-50">
                 <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
                     <button onClick={() => router.back()} className="p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-900">
@@ -110,11 +117,8 @@ export default function CheckoutPage() {
             <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
 
-                    {/* فورم البيانات - اليسار */}
                     <div className="lg:col-span-7 space-y-8">
-
-                        {/* القسم الأول: معلومات الشحن */}
-                        <section className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm transition-all hover:shadow-md">
+                        <section className="bg-white p-8 rounded-4xl border border-gray-100 shadow-sm transition-all hover:shadow-md">
                             <h2 className="text-lg font-black mb-8 flex items-center gap-4 text-gray-900">
                                 <span className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs shadow-lg shadow-black/20">01</span>
                                 تفاصيل المستلم
@@ -123,13 +127,13 @@ export default function CheckoutPage() {
                             <form id="checkout-form" onSubmit={handleSubmit} className="space-y-6">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest">الاسم الكامل</label>
+                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">الاسم الكامل</label>
                                         <div className="relative">
                                             <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                                             <input
                                                 required
                                                 type="text"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold"
+                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
                                                 placeholder="الاسم كما يظهر في البطاقة"
                                                 value={formData.name}
                                                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -138,13 +142,13 @@ export default function CheckoutPage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest">رقم الهاتف</label>
+                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">رقم الهاتف</label>
                                         <div className="relative">
                                             <Phone className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                                             <input
                                                 required
                                                 type="tel"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold"
+                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
                                                 placeholder="01xxxxxxxxx"
                                                 value={formData.phone}
                                                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
@@ -154,13 +158,13 @@ export default function CheckoutPage() {
                                 </div>
 
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest">البريد الإلكتروني</label>
+                                    <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">البريد الإلكتروني</label>
                                     <div className="relative">
                                         <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                                         <input
                                             required
                                             type="email"
-                                            className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold"
+                                            className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
                                             placeholder="example@domain.com"
                                             value={formData.email}
                                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -170,13 +174,13 @@ export default function CheckoutPage() {
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest">المحافظة / المدينة</label>
+                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">المحافظة / المدينة</label>
                                         <div className="relative">
                                             <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
                                             <input
                                                 required
                                                 type="text"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold"
+                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
                                                 placeholder="القاهرة، الإسكندرية..."
                                                 value={formData.city}
                                                 onChange={(e) => setFormData({ ...formData, city: e.target.value })}
@@ -185,11 +189,11 @@ export default function CheckoutPage() {
                                     </div>
 
                                     <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest">العنوان التفصيلي</label>
+                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">العنوان التفصيلي</label>
                                         <input
                                             required
                                             type="text"
-                                            className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold"
+                                            className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
                                             placeholder="رقم الشقة، الدور، اسم الشارع"
                                             value={formData.address}
                                             onChange={(e) => setFormData({ ...formData, address: e.target.value })}
@@ -199,19 +203,18 @@ export default function CheckoutPage() {
                             </form>
                         </section>
 
-                        {/* القسم الثاني: الدفع */}
-                        <section className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm">
+                        <section className="bg-white p-8 rounded-4xl border border-gray-100 shadow-sm">
                             <h2 className="text-lg font-black mb-8 flex items-center gap-4 text-gray-900">
                                 <span className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs shadow-lg shadow-black/20">02</span>
                                 طريقة الدفع
                             </h2>
                             <div className="relative group cursor-pointer">
-                                <div className="p-6 border-2 border-black rounded-[2rem] flex justify-between items-center bg-black/[0.02] transition-all">
+                                <div className="p-6 border-2 border-black rounded-4xl flex justify-between items-center bg-black/5 transition-all">
                                     <div className="flex items-center gap-5">
                                         <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center text-white shadow-xl shadow-black/10">
                                             <Truck size={24} />
                                         </div>
-                                        <div>
+                                        <div className="text-right">
                                             <p className="font-black text-sm text-gray-900">الدفع عند الاستلام</p>
                                             <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">Cash on delivery</p>
                                         </div>
@@ -224,19 +227,23 @@ export default function CheckoutPage() {
                         </section>
                     </div>
 
-                    {/* ملخص الطلب - اليمين */}
                     <div className="lg:col-span-5">
-                        <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-2xl sticky top-32">
+                        <div className="bg-white p-8 rounded-4xl border border-gray-100 shadow-2xl sticky top-32">
                             <div className="flex items-center justify-between mb-8">
                                 <h2 className="text-lg font-black text-gray-900">ملخص الحقيبة</h2>
                                 <ShoppingBag size={20} className="text-gray-300" />
                             </div>
 
                             <div className="space-y-6 max-h-[40vh] overflow-y-auto pr-2 mb-8 custom-scrollbar">
-                                {cartItems.map((item: any) => (
+                                {cartItems.map((item: CartItem) => (
                                     <div key={`${item.id}-${item.size}-${item.color}`} className="flex gap-5 group">
-                                        <div className="w-20 h-24 bg-gray-50 rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100">
-                                            <img src={item.image} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" />
+                                        <div className="w-20 h-24 bg-gray-50 rounded-2xl overflow-hidden shrink-0 border border-gray-100 relative">
+                                            <Image
+                                                src={item.image}
+                                                alt={item.name}
+                                                fill
+                                                className="object-cover group-hover:scale-110 transition-transform duration-500"
+                                            />
                                         </div>
                                         <div className="flex-1 text-right py-1">
                                             <h4 className="font-bold text-xs text-gray-900 mb-1 leading-relaxed">{item.name}</h4>

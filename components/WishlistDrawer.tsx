@@ -4,7 +4,15 @@ import { useWishlist } from '@/app/context/WishlistContext';
 import { useCart } from '@/app/context/CartContext';
 import { X, Heart, Trash2, ShoppingBag, ArrowLeft } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
+
+// تعريف نوع البيانات للمنتج
+interface WishlistItem {
+    id: string | number;
+    name: string;
+    price: number;
+    image?: string;
+    images?: string[];
+}
 
 export default function WishlistDrawer() {
     const { wishlist, removeFromWishlist, isWishlistOpen, setIsWishlistOpen } = useWishlist();
@@ -13,7 +21,7 @@ export default function WishlistDrawer() {
     if (!isWishlistOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[100] flex justify-end">
+        <div className="fixed inset-0 z-50 flex justify-end">
             {/* Overlay */}
             <div
                 className="absolute inset-0 bg-[#4A3E31]/40 backdrop-blur-sm transition-opacity"
@@ -48,38 +56,52 @@ export default function WishlistDrawer() {
                             </button>
                         </div>
                     ) : (
-                        wishlist.map((item: any) => (
-                            <div key={item.id} className="flex gap-4 p-4 rounded-3xl border border-[#F7F3F0] hover:border-[#EDEAE5] transition-all group">
-                                <div className="w-24 h-32 relative rounded-2xl overflow-hidden shrink-0 border border-[#EDEAE5]">
-                                    <Image src={item.image || item.images?.[0]} alt={item.name} fill className="object-cover" />
-                                </div>
-                                <div className="flex-1 flex flex-col justify-between py-1">
-                                    <div>
-                                        <h3 className="text-sm font-black text-[#4A3E31] mb-1">{item.name}</h3>
-                                        <p className="text-[#8B735B] font-serif italic text-xs">{item.price.toLocaleString()} ج.م</p>
+                        wishlist.map((item: WishlistItem) => {
+                            // تحديد رابط الصورة النهائي لضمان عدم تمرير undefined
+                            const finalImage = item.image || item.images?.[0] || '/placeholder.png';
+
+                            return (
+                                <div key={item.id} className="flex gap-4 p-4 rounded-3xl border border-[#F7F3F0] hover:border-[#EDEAE5] transition-all group">
+                                    <div className="w-24 h-32 relative rounded-2xl overflow-hidden shrink-0 border border-[#EDEAE5]">
+                                        <Image src={finalImage} alt={item.name} fill className="object-cover" />
                                     </div>
-                                    <div className="flex gap-2">
-                                        <button
-                                            onClick={() => {
-                                                addToCart({ ...item, quantity: 1 });
-                                                removeFromWishlist(item.id);
-                                                setIsWishlistOpen(false);
-                                                setIsCartOpen(true);
-                                            }}
-                                            className="flex-1 bg-[#4A3E31] text-white text-[10px] font-black uppercase py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all"
-                                        >
-                                            <ShoppingBag size={12} /> نقله للسلة
-                                        </button>
-                                        <button
-                                            onClick={() => removeFromWishlist(item.id)}
-                                            className="p-2.5 bg-red-50 text-red-400 rounded-xl hover:bg-red-100 hover:text-red-600 transition-all"
-                                        >
-                                            <Trash2 size={14} />
-                                        </button>
+                                    <div className="flex-1 flex flex-col justify-between py-1">
+                                        <div>
+                                            <h3 className="text-sm font-black text-[#4A3E31] mb-1">{item.name}</h3>
+                                            <p className="text-[#8B735B] font-serif italic text-xs">{item.price.toLocaleString()} ج.م</p>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button
+                                                onClick={() => {
+                                                    // الحل: نرسل كائن جديد يحتوي على القيمة المؤكدة للصورة
+                                                    addToCart({
+                                                        id: item.id,
+                                                        name: item.name,
+                                                        price: item.price,
+                                                        image: finalImage, // القيمة هنا string يقيناً
+                                                        quantity: 1,
+                                                        size: 'M',
+                                                        color: 'Gold'
+                                                    });
+                                                    removeFromWishlist(item.id);
+                                                    setIsWishlistOpen(false);
+                                                    setIsCartOpen(true);
+                                                }}
+                                                className="flex-1 bg-[#4A3E31] text-white text-[10px] font-black uppercase py-2.5 rounded-xl flex items-center justify-center gap-2 hover:bg-black transition-all"
+                                            >
+                                                <ShoppingBag size={12} /> نقله للسلة
+                                            </button>
+                                            <button
+                                                onClick={() => removeFromWishlist(item.id)}
+                                                className="p-2.5 bg-red-50 text-red-400 rounded-xl hover:bg-red-100 hover:text-red-600 transition-all"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     )}
                 </div>
 

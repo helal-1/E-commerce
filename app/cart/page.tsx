@@ -6,17 +6,29 @@ import {
     Search, ShoppingBag, Plus, Minus, Trash2, X, Loader2
 } from 'lucide-react';
 
+// --- تعريف الأنواع (Interfaces) لمنع استخدام any ---
+interface Product {
+    id: string;
+    name: string;
+    price: number;
+    category: string;
+    images: string[];
+}
+
+interface CartItem extends Product {
+    quantity: number;
+}
+
 export default function ShopPage() {
-    const [products, setProducts] = useState<any[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
     const [loading, setLoading] = useState(true);
     const [category, setCategory] = useState('الكل');
     const [searchQuery, setSearchQuery] = useState('');
     const [isCartOpen, setIsCartOpen] = useState(false);
-    const [cartItems, setCartItems] = useState<any[]>([]);
+    const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-    // 1. تعريف الدالة باستخدام useCallback لمنع إعادة الإنشاء غير الضرورية
+    // 1. جلب المنتجات باستخدام useCallback
     const fetchProducts = useCallback(async () => {
-        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -24,22 +36,31 @@ export default function ShopPage() {
 
             if (error) {
                 console.error("خطأ سوبابيس:", error.message);
-                return;
+                return [];
             }
-            setProducts(data || []);
-        } catch (error: any) {
-            console.error("خطأ في الكود:", error.message);
-        } finally {
-            setLoading(false);
+            return (data as Product[]) || [];
+        } catch (error) {
+            console.error("خطأ في الكود:", error);
+            return [];
         }
     }, []);
 
-    // 2. تشغيل الجلب عند تحميل الصفحة
+    // 2. تشغيل الجلب بنمط آمن
     useEffect(() => {
-        fetchProducts();
+        let isMounted = true;
+        const loadInitialData = async () => {
+            setLoading(true);
+            const data = await fetchProducts();
+            if (isMounted) {
+                setProducts(data);
+                setLoading(false);
+            }
+        };
+        loadInitialData();
+        return () => { isMounted = false; };
     }, [fetchProducts]);
 
-    // --- منطق الفلترة المطور باستخدام useMemo لزيادة الأداء ---
+    // --- منطق الفلترة المطور ---
     const filteredProducts = useMemo(() => {
         return products.filter(p => {
             const matchesCategory = category === 'الكل' || p.category === category;
@@ -49,7 +70,7 @@ export default function ShopPage() {
     }, [products, category, searchQuery]);
 
     // --- منطق السلة ---
-    const addToCart = (product: any) => {
+    const addToCart = (product: Product) => {
         setCartItems(prev => {
             const exists = prev.find(item => item.id === product.id);
             if (exists) {
@@ -60,13 +81,13 @@ export default function ShopPage() {
         setIsCartOpen(true);
     };
 
-    const updateQuantity = (id: any, delta: number) => {
+    const updateQuantity = (id: string, delta: number) => {
         setCartItems(prev => prev.map(item =>
             item.id === id ? { ...item, quantity: Math.max(1, item.quantity + delta) } : item
         ));
     };
 
-    const removeItem = (id: any) => {
+    const removeItem = (id: string) => {
         setCartItems(prev => prev.filter(item => item.id !== id));
     };
 
@@ -87,7 +108,7 @@ export default function ShopPage() {
 
                 {/* Header */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-12 border-b border-gray-100 pb-8 gap-6">
-                    <div className="flex items-center gap-8 w-full md:w-auto">
+                    <div className="flex items-center gap-8 w-full md:w-auto text-right">
                         <h1 className="text-4xl md:text-5xl font-serif text-gray-900">المجموعة</h1>
                         <button onClick={() => setIsCartOpen(true)} className="relative p-3 bg-black text-white rounded-full hover:scale-105 transition-transform">
                             <ShoppingBag size={20} />
@@ -115,7 +136,7 @@ export default function ShopPage() {
                     {/* Sidebar */}
                     <aside className="w-full lg:w-64 space-y-10">
                         <div>
-                            <h3 className="text-xs font-black uppercase tracking-widest mb-6 text-gray-400">التصنيفات</h3>
+                            <h3 className="text-xs font-black uppercase tracking-widest mb-6 text-gray-400 text-right">التصنيفات</h3>
                             <div className="flex flex-wrap lg:flex-col gap-2">
                                 {['الكل', 'فساتين', 'قمصان', 'بناطيل', 'جاكيتات'].map((cat) => (
                                     <button
@@ -134,9 +155,9 @@ export default function ShopPage() {
                     <div className="flex-1 grid gap-x-8 gap-y-16 grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
                         {filteredProducts.map((product) => (
                             <div key={product.id} className="group cursor-pointer">
-                                <div className="relative aspect-[3/4] bg-[#F9F9F9] overflow-hidden mb-6 rounded-[2rem]">
+                                <div className="relative aspect-3/4 bg-[#F9F9F9] overflow-hidden mb-6 rounded-4xl">
                                     <img
-                                        src={product.images?.[0]}
+                                        src={product.images?.[0] || '/placeholder.png'}
                                         alt={product.name}
                                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                     />
@@ -185,7 +206,7 @@ export default function ShopPage() {
                                 cartItems.map((item) => (
                                     <div key={item.id} className="flex gap-6 border-b border-gray-50 pb-6">
                                         <div className="w-24 h-32 bg-gray-100 rounded-xl overflow-hidden flex-shrink-0">
-                                            <img src={item.images?.[0]} className="w-full h-full object-cover" alt={item.name} />
+                                            <img src={item.images?.[0] || '/placeholder.png'} className="w-full h-full object-cover" alt={item.name} />
                                         </div>
                                         <div className="flex-1 flex flex-col justify-between py-1 text-right">
                                             <div className="flex justify-between items-start">
@@ -212,7 +233,7 @@ export default function ShopPage() {
                         </div>
 
                         {cartItems.length > 0 && (
-                            <div className="p-8 border-t bg-gray-50 space-y-6">
+                            <div className="p-8 border-t bg-gray-50 space-y-6 text-right">
                                 <div className="flex justify-between items-center font-black text-lg">
                                     <span>{subtotal.toLocaleString()} ج.م</span>
                                     <span className="font-serif">المجموع الفرعي</span>
