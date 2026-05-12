@@ -75,7 +75,7 @@ export default function ProfilePage() {
             'shipped': { text: 'جاري التوصيل', icon: <Truck size={18} />, color: 'text-blue-700', bg: 'bg-blue-100', accent: 'bg-blue-500' },
             'completed': { text: 'تم التسليم', icon: <CheckCircle size={18} />, color: 'text-emerald-700', bg: 'bg-emerald-100', accent: 'bg-emerald-500' }
         };
-        return statuses[status] || { text: 'تحت المعالجة', icon: <Package size={18} />, color: 'text-slate-700', bg: 'bg-slate-100', accent: 'bg-slate-500' };
+        return statuses[status] || { text: 'تحت المعالجة...', icon: <Package size={18} />, color: 'text-slate-700', bg: 'bg-slate-100', accent: 'bg-slate-500' };
     };
 
     if (loading) return (
