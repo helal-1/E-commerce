@@ -235,7 +235,7 @@ export default function CheckoutPage() {
                             </div>
 
                             <div className="space-y-6 max-h-[40vh] overflow-y-auto pr-2 mb-8 custom-scrollbar">
-                                {cartItems.map((item: CartItem) => (
+                                {cartItems.map((item: any) => (
                                     <div key={`${item.id}-${item.size}-${item.color}`} className="flex gap-5 group">
                                         <div className="w-20 h-24 bg-gray-50 rounded-2xl overflow-hidden shrink-0 border border-gray-100 relative">
                                             <Image
