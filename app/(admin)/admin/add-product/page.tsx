@@ -1,13 +1,15 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import Image from 'next/image'; // تحسين الأداء بالصور
-import { Upload, Plus, X, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Upload, Plus, X, Loader2, CheckCircle2, AlertCircle, Tag, Ruler } from 'lucide-react';
 
 export default function AddProduct() {
     const [loading, setLoading] = useState(false);
     const [images, setImages] = useState<File[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
+    const formRef = useRef<HTMLFormElement>(null); // مرجع للوصول لعناصر النموذج برمجياً
+
     const [alert, setAlert] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
         show: false,
         msg: '',
@@ -48,6 +50,16 @@ export default function AddProduct() {
         setPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
+    // دالة لملء المقاسات برمجياً
+    const quickSetSizes = (sizeString: string) => {
+        if (formRef.current) {
+            const sizesInput = formRef.current.elements.namedItem('sizes') as HTMLInputElement;
+            if (sizesInput) {
+                sizesInput.value = sizeString;
+            }
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         setLoading(true);
@@ -76,10 +88,12 @@ export default function AddProduct() {
             // 2. حفظ البيانات
             const sizesInput = formData.get('sizes') as string;
             const colorsInput = formData.get('colors') as string;
+            const discountInput = formData.get('discount') as string;
 
             const { error: dbError } = await supabase.from('products').insert([{
                 name: formData.get('name'),
                 price: parseFloat(formData.get('price') as string),
+                discount: discountInput ? parseFloat(discountInput) : 0,
                 description: formData.get('description'),
                 category: formData.get('category'),
                 images: imageUrls,
@@ -122,7 +136,7 @@ export default function AddProduct() {
                 <p className="text-gray-400 font-medium">املئي التفاصيل لإدراج منتج جديد في Zelda Line</p>
             </div>
 
-            <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <form ref={formRef} onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-12">
                 <div className="space-y-8">
                     <div className="space-y-4">
                         <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">معرض الصور (3 صور كحد أقصى)</label>
@@ -163,9 +177,17 @@ export default function AddProduct() {
                         </select>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">السعر (ج.م)</label>
-                        <input name="price" type="number" required placeholder="0.00" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">السعر (ج.م)</label>
+                            <input name="price" type="number" required placeholder="0.00" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-red-400 flex items-center gap-1">
+                                <Tag size={10} /> نسبة الخصم (%)
+                            </label>
+                            <input name="discount" type="number" placeholder="0" className="w-full bg-red-50/30 border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-red-100 transition-all font-bold text-red-600 placeholder-red-300" />
+                        </div>
                     </div>
                 </div>
 
@@ -176,8 +198,28 @@ export default function AddProduct() {
                         <p className="text-[10px] text-gray-400 font-medium italic">* تظهر الألوان كفلاتر ذكية في المتجر.</p>
                     </div>
 
-                    <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">المقاسات (افصلي بفاصلة ,)</label>
+                    <div className="space-y-3">
+                        <div className="flex justify-between items-center">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 flex items-center gap-1">
+                                <Ruler size={10} /> المقاسات (افصلي بفاصلة ,)
+                            </label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => quickSetSizes("37, 38, 39, 40, 41")}
+                                    className="text-[9px] font-bold bg-[#F7F3F0] text-[#8B735B] px-2 py-1 rounded-lg hover:bg-[#8B735B] hover:text-white transition-all"
+                                >
+                                    + مقاسات أحذية
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => quickSetSizes("S, M, L, XL, XXL")}
+                                    className="text-[9px] font-bold bg-[#F7F3F0] text-[#8B735B] px-2 py-1 rounded-lg hover:bg-[#8B735B] hover:text-white transition-all"
+                                >
+                                    + مقاسات ملابس
+                                </button>
+                            </div>
+                        </div>
                         <input name="sizes" placeholder="S, M, L, XL" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
 

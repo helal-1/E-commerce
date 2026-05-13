@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import Image from 'next/image'; // استيراد مكون الصورة من نيكست
 import {
-    Plus,
     Search,
     Edit,
     Trash2,
@@ -19,16 +19,15 @@ import {
     LayoutGrid
 } from 'lucide-react';
 
-// تحديث نوع المنتج ليشمل الميزات الجديدة
 interface Product {
     id: string;
     name: string;
     price: number;
     category: string;
     images: string[];
-    discount?: number; // الخصم
-    colors?: string[]; // الألوان
-    sizes?: string[];  // المقاسات
+    discount?: number;
+    colors?: string[];
+    sizes?: string[];
     created_at?: string;
 }
 
@@ -49,7 +48,6 @@ export default function ProductsPage() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-    // حالات مساعدة لإدارة المدخلات المتعددة (الألوان والمقاسات) في التعديل
     const [colorInput, setColorInput] = useState("");
     const [sizeInput, setSizeInput] = useState("");
 
@@ -156,7 +154,6 @@ export default function ProductsPage() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    // دوال لإدارة مصفوفات الألوان والمقاسات داخل الـ Modal
     const addColor = () => {
         if (colorInput && editingProduct) {
             const currentColors = editingProduct.colors || [];
@@ -174,6 +171,12 @@ export default function ProductsPage() {
                 setEditingProduct({ ...editingProduct, sizes: [...currentSizes, sizeInput] });
             }
             setSizeInput("");
+        }
+    };
+
+    const quickSetSizesInEdit = (sizesArray: string[]) => {
+        if (editingProduct) {
+            setEditingProduct({ ...editingProduct, sizes: sizesArray });
         }
     };
 
@@ -197,9 +200,6 @@ export default function ProductsPage() {
                         <h1 className="text-3xl font-serif text-[#4A3E31] tracking-tight">المعرض المباشر</h1>
                         <p className="text-[#8B735B] mt-1 font-medium italic text-sm">إدارة مقتنيات زيلدا لاين وتحديثها لحظياً.</p>
                     </div>
-                    <button className="w-full md:w-auto bg-[#4A3E31] text-white px-8 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-black transition-all shadow-xl active:scale-95">
-                        <Plus size={20} /> إضافة قطعة جديدة
-                    </button>
                 </div>
 
                 {/* Search */}
@@ -226,10 +226,11 @@ export default function ProductsPage() {
                     ) : currentProducts.map((product) => (
                         <div key={product.id} className="bg-white rounded-4xl border border-[#EDEAE5] shadow-sm overflow-hidden group hover:shadow-xl hover:border-[#8B735B]/30 transition-all duration-500 animate-in fade-in zoom-in-95">
                             <div className="aspect-[4/5] bg-[#F7F3F0] relative overflow-hidden">
-                                <img
+                                <Image
                                     src={product.images && product.images[0] ? product.images[0] : "/placeholder.png"}
                                     alt={product.name}
-                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                    fill
+                                    className="object-cover group-hover:scale-110 transition-transform duration-700"
                                 />
                                 <div className="absolute top-4 left-4 bg-white/80 backdrop-blur-md px-4 py-1.5 rounded-full text-[10px] font-black uppercase text-[#4A3E31] tracking-widest shadow-sm">
                                     {product.category}
@@ -305,10 +306,10 @@ export default function ProductsPage() {
                 )}
             </div>
 
-            {/* Edit Modal المطور */}
+            {/* Edit Modal */}
             {isEditModalOpen && (
-                <div className="fixed inset-0 bg-[#4A3E31]/40 backdrop-blur-md z-50 flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-2xl rounded-4xl p-6 md:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
+                <div className="fixed inset-0 bg-[#4A3E31]/40 backdrop-blur-md z-[200] flex items-center justify-center p-4 md:p-6 animate-in fade-in duration-300">
+                    <div className="bg-white mt-12 w-full max-w-2xl rounded-4xl p-6 md:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto custom-scrollbar">
                         <button onClick={() => setIsEditModalOpen(false)} className="absolute top-6 left-6 text-[#8B735B] hover:text-[#4A3E31] transition-colors">
                             <X size={24} />
                         </button>
@@ -316,7 +317,6 @@ export default function ProductsPage() {
                         <h2 className="text-2xl font-serif text-[#4A3E31] mb-8 border-b pb-4">تعديل بيانات القطعة الفنية</h2>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {/* الاسم */}
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
                                     <Tag size={14} /> اسم المنتج
@@ -329,7 +329,6 @@ export default function ProductsPage() {
                                 />
                             </div>
 
-                            {/* القسم */}
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
                                     <LayoutGrid size={14} /> القسم
@@ -340,13 +339,12 @@ export default function ProductsPage() {
                                     className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 font-bold text-[#4A3E31]"
                                 >
                                     <option value="فساتين">فساتين</option>
-                                    <option value="عبايات">عبايات</option>
-                                    <option value="ملابس كاجوال">ملابس كاجوال</option>
-                                    <option value="إكسسوارات">إكسسوارات</option>
+                                    <option value="الأساسيات">الأساسيات</option>
+                                    <option value="جاكيتات">جاكيتات</option>
+                                    <option value="جديد">جديد</option>
                                 </select>
                             </div>
 
-                            {/* السعر */}
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-[#A6998A] mr-2">السعر الأصلي</label>
                                 <input
@@ -357,7 +355,6 @@ export default function ProductsPage() {
                                 />
                             </div>
 
-                            {/* الخصم */}
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-[#A6998A] mr-2">نسبة الخصم (%)</label>
                                 <input
@@ -368,7 +365,6 @@ export default function ProductsPage() {
                                 />
                             </div>
 
-                            {/* الألوان */}
                             <div className="space-y-2 md:col-span-2">
                                 <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
                                     <Palette size={14} /> الألوان المتوفرة
@@ -393,15 +389,32 @@ export default function ProductsPage() {
                                 </div>
                             </div>
 
-                            {/* المقاسات */}
                             <div className="space-y-2 md:col-span-2">
-                                <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
-                                    <Ruler size={14} /> المقاسات المتاحة
-                                </label>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
+                                        <Ruler size={14} /> المقاسات المتاحة
+                                    </label>
+                                    <div className="flex gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => quickSetSizesInEdit(["37", "38", "39", "40", "41"])}
+                                            className="text-[9px] font-bold bg-[#F7F3F0] text-[#8B735B] px-2 py-1 rounded-lg hover:bg-[#8B735B] hover:text-white transition-all"
+                                        >
+                                            + أحذية
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => quickSetSizesInEdit(["S", "M", "L", "XL", "XXL"])}
+                                            className="text-[9px] font-bold bg-[#F7F3F0] text-[#8B735B] px-2 py-1 rounded-lg hover:bg-[#8B735B] hover:text-white transition-all"
+                                        >
+                                            + ملابس
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="flex gap-2 mb-2">
                                     <input
                                         type="text"
-                                        placeholder="مثال: XL"
+                                        placeholder="إضافة مقاس يدوي"
                                         value={sizeInput}
                                         onChange={(e) => setSizeInput(e.target.value)}
                                         className="flex-1 bg-[#FCFBF9] border border-[#EDEAE5] p-3 rounded-xl outline-none"

@@ -42,12 +42,12 @@ export default function Home() {
   const heroWords = useMemo(() => ["عفة", "أناقة", "تميز"], []);
 
   const instaImages = useMemo(() => [
-    "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800",
+    "/photo-1515886657613-9f3515b0c78f.jpeg",
     "/herobanner.png",
-    "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?q=80&w=800",
-    "https://images.unsplash.com/photo-1539109136881-3be0616acf4b?q=80&w=800",
+    "/photo-1490481651871-ab68de25d43d.jpeg",
+    "/photo-1539109136881-3be0616acf4b.jpeg",
     "/pngtree-row-of-colorful-robes-hanging-on-a-rack-picture-image_15858673.jpg",
-    "https://images.unsplash.com/photo-1509631179647-0177331693ae?q=80&w=800"
+    "/photo-1509631179647-0177331693ae.jpeg"
   ], []);
 
   const getImageUrl = (imagePath: string | null) => {
@@ -133,9 +133,9 @@ export default function Home() {
             <ArrowUp size={24} />
           </button>
         )}
-        <a href="https://wa.me/201092882189" target="_blank" rel="noopener noreferrer" className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 transition-all">
+        {/* <a href="https://wa.me/201092882189" target="_blank" rel="noopener noreferrer" className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 transition-all">
           <MessageCircle size={32} />
-        </a>
+        </a> */}
       </div>
 
       {/* 1. Hero Section */}
@@ -224,7 +224,7 @@ export default function Home() {
           <div className="w-full lg:w-1/2 relative group">
             <div className="relative aspect-4/5 w-4/5 rounded-[4rem] overflow-hidden shadow-2xl z-10">
               <Image
-                src="https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?q=80&w=800"
+                src="/photo-1515886657613-9f3515b0c78f.jpeg"
                 alt="Main Look"
                 fill
                 priority
@@ -243,7 +243,7 @@ export default function Home() {
               </div>
             </div>
             <div className="absolute -bottom-16 -left-8 w-2/3 aspect-square rounded-[3rem] overflow-hidden shadow-2xl z-20 border-8 border-white hidden md:block">
-              <Image src="https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=800" fill sizes="30vw" className="object-cover" alt="Second Look" />
+              <Image src="/photo-1483985988355-763728e1935b.jpeg" fill sizes="30vw" className="object-cover" alt="Second Look" />
             </div>
           </div>
 
@@ -364,7 +364,7 @@ export default function Home() {
       <section className="py-40 z-0 bg-white px-6 md:px-12">
         <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-24 items-center">
           <div className="relative h-200 w-full rounded-[4rem] overflow-hidden shadow-2xl">
-            <Image src="https://images.unsplash.com/photo-1539109136881-3be0616acf4b?q=80&w=800" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" alt="Brand Story" />
+            <Image src="/photo-1539109136881-3be0616acf4b.jpeg" fill sizes="(max-width: 768px) 100vw, 50vw" className="object-cover" alt="Brand Story" />
           </div>
           <div className="space-y-12">
             <h2 className="text-5xl md:text-7xl font-serif text-gray-900 leading-tight italic font-light">الاحتشام هو أرقى <br /> أنواع التميز</h2>
@@ -398,7 +398,7 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-12 text-right">
                 {[
                   { step: "01", title: "انتقاءُ النسيج", desc: "نسافرُ شرقاً وغرباً لنجلبَ لكِ أجودَ أنواع الكريب الكوري والحرير الطبيعي.", img: "/Gemini_Generated_Image_ee1zetee1zetee1z.png" },
-                  { step: "02", title: "القصُّ الهندسي", desc: "بأيدي خبراءٍ يفهمون تفاصيل القوام، نعتمدُ قصاتٍ تمنحكِ الراحةَ التامة.", img: "https://images.unsplash.com/photo-1516914943479-89db7d9ae7f2?q=80&w=600" },
+                  { step: "02", title: "القصُّ الهندسي", desc: "بأيدي خبراءٍ يفهمون تفاصيل القوام، نعتمدُ قصاتٍ تمنحكِ الراحةَ التامة.", img: "/photo-1516914943479-89db7d9ae7f2.jpeg" },
                   { step: "03", title: "التطريزُ اليدوي", desc: "غرزةٌ تلو الأخرى، تُحاكُ التفاصيلُ بكل حبّ لتخرجَ كل قطعة كلوحةٍ فنية.", img: "/hq720.jpg" }
                 ].map((item, i) => (
                   <div key={i} className="group space-y-8">
@@ -438,9 +438,9 @@ export default function Home() {
           <div>
             <h4 className="font-black mb-8 text-xs uppercase tracking-widest text-stone-900">روابط سريعة</h4>
             <ul className="space-y-4 text-stone-400 text-sm font-bold">
-              <li className="hover:text-black cursor-pointer transition-colors">سياسة الاستبدال</li>
-              <li className="hover:text-black cursor-pointer transition-colors">تتبع الطلبات</li>
-              <li className="hover:text-black cursor-pointer transition-colors">الأسئلة الشائعة</li>
+              <li className="hover:text-black cursor-pointer transition-colors"><Link href="/return-policy" className="hover:text-black transition-colors">سياسة الاستبدال</Link></li>
+              <li className="hover:text-black cursor-pointer transition-colors"><Link href="/about" className="hover:text-black transition-colors">من نحن</Link></li>
+              <li className="hover:text-black cursor-pointer transition-colors"><Link href="/faqs" className="hover:text-black transition-colors">الأسئلة الشائعة</Link></li>
             </ul>
           </div>
           <div>

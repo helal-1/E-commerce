@@ -21,7 +21,7 @@ export default function WishlistDrawer() {
     if (!isWishlistOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex justify-end">
+        <div className="fixed inset-0 z-[200] flex justify-end">
             {/* Overlay */}
             <div
                 className="absolute inset-0 bg-[#4A3E31]/40 backdrop-blur-sm transition-opacity"

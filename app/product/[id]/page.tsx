@@ -1,9 +1,10 @@
+/* eslint-disable react/no-unescaped-entities */
 "use client";
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import Link from 'next/link'; // تصحيح الاستيراد ليكون من next/link
-import Image from 'next/image'; // استيراد Image لتحسين الأداء وحل تحذير ESLint
+import Link from 'next/link';
+import Image from 'next/image';
 import { supabase } from '@/lib/supabase';
 import {
     ShoppingBag,
@@ -15,7 +16,9 @@ import {
     ArrowRight,
     X,
     Loader2,
-    Tag
+    Tag,
+    CheckCircle2,
+    AlertCircle
 } from 'lucide-react';
 import { useCart } from '@/app/context/CartContext';
 import { useWishlist } from '@/app/context/WishlistContext';
@@ -30,6 +33,7 @@ interface Product {
     description: string;
     images: string[];
     colors: string[];
+    sizes: string[]; // تم تحديثها لتكون مصفوفة ديناميكية
     material?: string;
 }
 
@@ -42,13 +46,26 @@ export default function ProductDetails() {
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedImg, setSelectedImg] = useState(0);
-    const [selectedSize, setSelectedSize] = useState('M');
+    const [selectedSize, setSelectedSize] = useState(''); // مقاس فارغ افتراضياً
     const [selectedColor, setSelectedColor] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
     const [isDescExpanded, setIsDescExpanded] = useState(false);
 
+    // حالة التنبيه المخصص (Custom Alert)
+    const [alert, setAlert] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
+        show: false,
+        msg: '',
+        type: 'success'
+    });
+
     const isLiked = wishlist.some((item) => item.id === params.id);
+
+    // دالة إظهار التنبيه الفخم
+    const showAlert = (msg: string, type: 'success' | 'error') => {
+        setAlert({ show: true, msg, type });
+        setTimeout(() => setAlert(prev => ({ ...prev, show: false })), 4000);
+    };
 
     const fetchProduct = useCallback(async () => {
         if (!params.id) return;
@@ -64,8 +81,12 @@ export default function ProductDetails() {
             const fetchedProduct = data as Product;
             setProduct(fetchedProduct);
 
+            // ضبط القيم الافتراضية بناءً على البيانات القادمة من السيرفر
             if (fetchedProduct.colors && fetchedProduct.colors.length > 0) {
-                setSelectedColor(prevColor => prevColor || fetchedProduct.colors[0]);
+                setSelectedColor(fetchedProduct.colors[0]);
+            }
+            if (fetchedProduct.sizes && fetchedProduct.sizes.length > 0) {
+                setSelectedSize(fetchedProduct.sizes[0]);
             }
         } catch (error: unknown) {
             console.error("Error:", (error as Error).message);
@@ -101,7 +122,12 @@ export default function ProductDetails() {
     const handleAddToCart = () => {
         if (!product) return;
 
-        // حل مشكلة product.discount is possibly undefined
+        // تحقق من اختيار المقاس قبل الإضافة
+        if (!selectedSize && product.sizes && product.sizes.length > 0) {
+            showAlert("جميلتي، يرجى اختيار المقاس أولاً", 'error');
+            return;
+        }
+
         const discountValue = product.discount ?? 0;
         const finalPrice = discountValue > 0
             ? product.price - (product.price * discountValue / 100)
@@ -116,6 +142,8 @@ export default function ProductDetails() {
             size: selectedSize,
             quantity: quantity
         });
+
+        showAlert("تمت إضافة القطعة لحقيبة تسوقك بنجاح", 'success');
         setIsCartOpen(true);
     };
 
@@ -133,7 +161,6 @@ export default function ProductDetails() {
         </div>
     );
 
-    // حسابات الخصم للعرض بشكل آمن
     const discountVal = product.discount ?? 0;
     const hasDiscount = discountVal > 0;
     const discountedPrice = hasDiscount
@@ -141,7 +168,20 @@ export default function ProductDetails() {
         : product.price;
 
     return (
-        <main className="min-h-screen bg-[#FCFBF9] pt-32 pb-20 px-6 md:px-12" dir="rtl">
+        <main className="min-h-screen bg-[#FCFBF9] pt-32 pb-20 px-6 md:px-12 relative" dir="rtl">
+
+            {/* Custom Alert - التنبيه المخصص */}
+            {alert.show && (
+                <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[300] min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'
+                    }`}>
+                    {alert.type === 'success' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-red-500" />}
+                    <p className="text-sm font-bold flex-1">{alert.msg}</p>
+                    <button onClick={() => setAlert(prev => ({ ...prev, show: false }))} className="opacity-50 hover:opacity-100 transition-opacity">
+                        <X size={18} />
+                    </button>
+                </div>
+            )}
+
             <div className="max-w-7xl mx-auto">
 
                 {/* Navigation Header */}
@@ -175,7 +215,6 @@ export default function ProductDetails() {
                                 {product.category}
                             </div>
 
-                            {/* استخدام مكون Image بدل img */}
                             <Image
                                 src={product.images?.[selectedImg] || '/placeholder.jpg'}
                                 alt={product.name}
@@ -221,9 +260,8 @@ export default function ProductDetails() {
                             <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-[#A6998A]">وصف القطعة</h4>
                             <div className="relative h-auto overflow-visible">
                                 <p
-                                    className={`text-[#8B735B] leading-loose text-lg font-serif italic transition-all duration-700 ease-in-out ${!isDescExpanded ? 'max-h-30 overflow-hidden' : 'max-h-500'}`}
+                                    className={`text-[#8B735B] leading-loose text-lg font-serif italic transition-all duration-700 ease-in-out ${!isDescExpanded ? 'max-h-32 overflow-hidden' : 'max-h-full'}`}
                                     style={{
-                                        maskImage: !isDescExpanded ? 'linear-gradient(to bottom, black 50%, transparent 100%)' : 'none',
                                         WebkitMaskImage: !isDescExpanded ? 'linear-gradient(to bottom, black 50%, transparent 100%)' : 'none'
                                     }}
                                 >
@@ -255,32 +293,43 @@ export default function ProductDetails() {
                             </div>
                         )}
 
-                        {/* اختيار المقاس */}
-                        <div className="space-y-6 text-right pt-4">
-                            <div className="flex justify-between items-end border-b border-[#F7F3F0] pb-4">
-                                <button onClick={() => setIsSizeGuideOpen(true)} className="text-[10px] font-black uppercase text-[#8B735B] border-b border-[#8B735B] hover:text-[#4A3E31] transition-colors">دليل القياسات</button>
-                                <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#A6998A]">المقاس المطلوب</h4>
+                        {/* اختيار المقاس - تم التعديل ليكون ديناميكياً بناءً على المنتج */}
+                        {product.sizes && product.sizes.length > 0 && (
+                            <div className="space-y-6 text-right pt-4">
+                                <div className="flex justify-between items-end border-b border-[#F7F3F0] pb-4">
+                                    <button onClick={() => setIsSizeGuideOpen(true)} className="text-[10px] font-black uppercase text-[#8B735B] border-b border-[#8B735B] hover:text-[#4A3E31] transition-colors">دليل القياسات</button>
+                                    <h4 className="text-xs font-black uppercase tracking-[0.2em] text-[#A6998A]">المقاس المطلوب</h4>
+                                </div>
+                                <div className="flex gap-3 justify-end flex-wrap">
+                                    {product.sizes.map(size => (
+                                        <button
+                                            key={size}
+                                            onClick={() => setSelectedSize(size)}
+                                            className={`min-w-[4rem] h-16 px-4 rounded-2xl border-2 font-bold transition-all duration-300 ${selectedSize === size ? 'bg-[#4A3E31] text-white border-[#4A3E31] shadow-xl' : 'border-[#EDEAE5] text-[#D4C3B3] hover:border-[#8B735B]'}`}
+                                        >
+                                            {size}
+                                        </button>
+                                    ))}
+                                </div>
                             </div>
-                            <div className="flex gap-3 justify-end">
-                                {['S', 'M', 'L', 'XL'].map(size => (
-                                    <button key={size} onClick={() => setSelectedSize(size)} className={`w-16 h-16 rounded-2xl border-2 font-bold transition-all duration-300 ${selectedSize === size ? 'bg-[#4A3E31] text-white border-[#4A3E31] shadow-xl' : 'border-[#EDEAE5] text-[#D4C3B3] hover:border-[#8B735B]'}`}>{size}</button>
-                                ))}
-                            </div>
-                        </div>
+                        )}
 
                         {/* التحكم في الكمية والإضافة */}
-                        <div className="flex flex-col sm:flex-row gap-4 h-auto sm:h-20 pt-6">
-                            <div className="flex items-center border-2 border-[#EDEAE5] rounded-3xl px-8 py-4 sm:py-0 gap-10 bg-white shadow-sm">
-                                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="text-2xl text-[#A6998A]">-</button>
+                        <div className="flex flex-col sm:flex-row gap-4 pt-6">
+                            <div className="flex justify-center items-center border-2 border-[#EDEAE5] rounded-3xl px-8 py-4 bg-white shadow-sm gap-10">
+                                <button onClick={() => setQuantity(q => Math.max(1, q - 1))} className="text-2xl text-[#A6998A] transition-colors hover:text-[#4A3E31]">-</button>
                                 <span className="font-black text-xl text-[#4A3E31]">{quantity}</span>
-                                <button onClick={() => setQuantity(q => q + 1)} className="text-2xl text-[#A6998A]">+</button>
+                                <button onClick={() => setQuantity(q => q + 1)} className="text-2xl text-[#A6998A] transition-colors hover:text-[#4A3E31]">+</button>
                             </div>
-                            <button onClick={handleAddToCart} className="flex-1 bg-[#4A3E31] text-white rounded-3xl font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-4 hover:bg-black transition-all shadow-2xl shadow-[#4A3E31]/20 py-6 sm:py-0">
+                            <button onClick={handleAddToCart} className="flex-1 bg-[#4A3E31] text-white rounded-3xl font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-4 hover:bg-black transition-all shadow-2xl shadow-[#4A3E31]/20 py-6">
                                 <ShoppingBag size={22} /> إضافة للحقيبة
                             </button>
                             <button
-                                onClick={() => addToWishlist(product)}
-                                className={`w-20 flex items-center justify-center border-2 rounded-3xl transition-all py-6 sm:py-0 ${isLiked ? 'border-[#A66C6C] bg-red-50 text-[#A66C6C]' : 'border-[#EDEAE5] bg-white text-[#4A3E31] hover:bg-red-50 hover:text-[#A66C6C]'}`}
+                                onClick={() => {
+                                    addToWishlist(product);
+                                    showAlert(isLiked ? "تمت إزالة القطعة من المفضلة" : "تمت إضافة القطعة للمفضلة", 'success');
+                                }}
+                                className={`w-20 flex items-center justify-center border-2 rounded-3xl transition-all py-6 ${isLiked ? 'border-[#A66C6C] bg-red-50 text-[#A66C6C]' : 'border-[#EDEAE5] bg-white text-[#4A3E31] hover:bg-red-50 hover:text-[#A66C6C]'}`}
                             >
                                 <Heart size={28} fill={isLiked ? "currentColor" : "none"} />
                             </button>
@@ -294,7 +343,7 @@ export default function ProductDetails() {
                                 { icon: ShieldCheck, text: 'منتج أصلي' }
                             ].map((item, i) => (
                                 <div key={i} className="text-center space-y-3">
-                                    <div className="w-12 h-12 rounded-full bg-[#F7F3F0] flex items-center justify-center mx-auto">
+                                    <div className="w-12 h-12 rounded-full bg-[#F7F3F0] flex items-center justify-center mx-auto transition-transform hover:scale-110">
                                         <item.icon className="text-[#8B735B]" size={20} />
                                     </div>
                                     <p className="text-[9px] font-black uppercase tracking-widest text-[#A6998A]">{item.text}</p>
@@ -302,6 +351,7 @@ export default function ProductDetails() {
                             ))}
                         </div>
 
+                        {/* تفاصيل إضافية */}
                         <div className="pt-6 space-y-4 text-right">
                             {[
                                 { title: 'الخامة والعناية بالقطعة', content: product.material || 'تنظيف جاف فقط للحفاظ على جودة التطريز.' },
@@ -321,31 +371,20 @@ export default function ProductDetails() {
                 </div>
             </div>
 
-            {/* Size Guide Modal */}
+            {/* Size Guide Modal - مودال دليل القياسات */}
             {isSizeGuideOpen && (
-                <div className="fixed inset-0 z-100 flex items-center justify-center px-4">
+                <div className="fixed inset-0 z-[400] flex items-center justify-center px-4 animate-in fade-in duration-300">
                     <div className="absolute inset-0 bg-[#4A3E31]/60 backdrop-blur-md" onClick={() => setIsSizeGuideOpen(false)}></div>
-                    <div className="relative bg-white w-full max-w-lg p-10 rounded-4xl border border-[#EDEAE5]">
-                        <button onClick={() => setIsSizeGuideOpen(false)} className="absolute top-6 left-6 text-[#D4C3B3] hover:text-[#4A3E31] transition-colors"><X size={28} /></button>
+                    <div className="relative bg-white w-full max-w-lg p-10 rounded-4xl border border-[#EDEAE5] shadow-2xl animate-in zoom-in duration-300">
+                        <button onClick={() => setIsSizeGuideOpen(false)} className="absolute top-6 left-6 text-[#D4C3B3] hover:text-[#4A3E31] transition-colors">
+                            <X size={28} />
+                        </button>
                         <h2 className="text-3xl font-serif text-center mb-8 text-[#4A3E31]">دليل القياسات الفني</h2>
                         <div className="bg-[#FCFBF9] rounded-3xl overflow-hidden border border-[#F7F3F0]">
-                            <table className="w-full text-center">
-                                <thead className="border-b border-[#EDEAE5] text-[#A6998A] font-black text-[10px] uppercase">
-                                    <tr><th className="py-4">المقاس</th><th className="py-4">الصدر (سم)</th><th className="py-4">الخصر (سم)</th></tr>
-                                </thead>
-                                <tbody className="text-[#8B735B] font-bold">
-                                    {[
-                                        ['S', '84-88', '66-70'],
-                                        ['M', '92-96', '74-78'],
-                                        ['L', '100-104', '82-86'],
-                                        ['XL', '110-116', '92-98']
-                                    ].map(([s, c, w]) => (
-                                        <tr key={s} className="border-b border-[#F7F3F0]">
-                                            <td className="py-4 text-[#4A3E31] font-black">{s}</td><td>{c}</td><td>{w}</td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                            <p className="p-6 text-center text-[#8B735B] font-serif italic leading-relaxed">
+                                المقاسات المعروضة تتبع المعايير العالمية الراقية. <br />
+                                في حال كان المنتج من فئة "الأحذية"، يرجى اختيار مقاسك المعتاد بناءً على الأرقام المعروضة.
+                            </p>
                         </div>
                     </div>
                 </div>
