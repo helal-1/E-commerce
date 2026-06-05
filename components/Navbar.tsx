@@ -210,14 +210,8 @@ export default function Navbar() {
                 className="flex items-center gap-4 p-3 bg-[#FCFBF9] border border-[#F7F3F0] rounded-2xl hover:bg-white transition-all active:scale-[0.98]"
               >
                 <div className="w-14 h-18 relative rounded-xl overflow-hidden shrink-0 border border-[#EDEAE5]">
-                 <div className="w-14 h-18 relative rounded-xl overflow-hidden shrink-0 border border-[#EDEAE5]">
-  <Image 
-    src={item.images[0]} 
-    alt={item.name} 
-    fill 
-    sizes="56px" // اختياري ولكن ممتاز للأداء
-    className="object-cover" 
-  />
+   <div className="w-14 h-18 relative rounded-xl overflow-hidden shrink-0 border border-[#EDEAE5]">
+  <img src={item.images[0]} alt={item.name} className="w-full h-full object-cover" />
 </div>
                 </div>
                 <div className="flex flex-col">
