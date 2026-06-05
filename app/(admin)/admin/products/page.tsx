@@ -116,7 +116,7 @@ export default function ProductsPage() {
             .update({
                 name: editingProduct.name,
                 price: editingProduct.price,
-                category: editingProduct.category,
+                category: editingProduct.category.trim(), 
                 discount: editingProduct.discount,
                 colors: editingProduct.colors,
                 sizes: editingProduct.sizes
@@ -331,18 +331,15 @@ export default function ProductsPage() {
 
                             <div className="space-y-2">
                                 <label className="text-xs font-black text-[#A6998A] flex items-center gap-2">
-                                    <LayoutGrid size={14} /> القسم
+                                    <LayoutGrid size={14} /> القسم (تعديل يدوي)
                                 </label>
-                                <select
+                                <input
+                                    type="text"
+                                    placeholder="مثال: فساتين، عباءات..."
                                     value={editingProduct?.category || ''}
                                     onChange={(e) => editingProduct && setEditingProduct({ ...editingProduct, category: e.target.value })}
                                     className="w-full bg-[#FCFBF9] border border-[#EDEAE5] p-4 rounded-2xl outline-none focus:ring-2 focus:ring-[#8B735B]/20 font-bold text-[#4A3E31]"
-                                >
-                                    <option value="فساتين">فساتين</option>
-                                    <option value="الأساسيات">الأساسيات</option>
-                                    <option value="جاكيتات">جاكيتات</option>
-                                    <option value="جديد">جديد</option>
-                                </select>
+                                />
                             </div>
 
                             <div className="space-y-2">

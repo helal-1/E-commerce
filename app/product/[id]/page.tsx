@@ -33,7 +33,7 @@ interface Product {
     description: string;
     images: string[];
     colors: string[];
-    sizes: string[]; // تم تحديثها لتكون مصفوفة ديناميكية
+    sizes: string[]; 
     material?: string;
 }
 
@@ -46,7 +46,7 @@ export default function ProductDetails() {
     const [product, setProduct] = useState<Product | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedImg, setSelectedImg] = useState(0);
-    const [selectedSize, setSelectedSize] = useState(''); // مقاس فارغ افتراضياً
+    const [selectedSize, setSelectedSize] = useState(''); 
     const [selectedColor, setSelectedColor] = useState('');
     const [quantity, setQuantity] = useState(1);
     const [isSizeGuideOpen, setIsSizeGuideOpen] = useState(false);
@@ -129,9 +129,12 @@ export default function ProductDetails() {
         }
 
         const discountValue = product.discount ?? 0;
-        const finalPrice = discountValue > 0
+        const rawFinalPrice = discountValue > 0
             ? product.price - (product.price * discountValue / 100)
             : product.price;
+
+        // تقريب السعر المضاف للسلة ليكون رقماً صحيحاً مية بالمية متوافقاً مع العرض
+        const finalPrice = Math.round(rawFinalPrice);
 
         addToCart({
             id: product.id,
@@ -163,9 +166,13 @@ export default function ProductDetails() {
 
     const discountVal = product.discount ?? 0;
     const hasDiscount = discountVal > 0;
-    const discountedPrice = hasDiscount
+    const rawDiscountedPrice = hasDiscount
         ? product.price - (product.price * discountVal / 100)
         : product.price;
+
+    // إزالة الكسور نهائياً من العرض باستخدام التقريب الصحيح لأقرب جنيه
+    const roundedPrice = Math.round(product.price);
+    const roundedDiscountedPrice = Math.round(rawDiscountedPrice);
 
     return (
         <main className="min-h-screen bg-[#FCFBF9] pt-32 pb-20 px-6 md:px-12 relative" dir="rtl">
@@ -187,14 +194,16 @@ export default function ProductDetails() {
                 {/* Navigation Header */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 border-b border-[#EDEAE5] pb-8">
                     <nav className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-[#A6998A] order-2 md:order-1">
-                        <Link href="/" className="hover:text-[#4A3E31] transition-colors">الرئيسية</Link>
-                        <ChevronLeft size={12} />
-                        <Link href="/shop" className="hover:text-[#4A3E31] transition-colors">المتجر</Link>
-                        <ChevronLeft size={12} />
-                        <span className="text-[#4A3E31]">{product.name}</span>
+                        <Link href="/" className="hover:text-[#4A3E31] text-2xl transition-colors">الرئيسية</Link>
+                        <ChevronLeft size={18} />
+                        <Link href="/shop" className="hover:text-[#4A3E31] text-2xl transition-colors">المتجر</Link>
+                        <ChevronLeft size={18} />
+                 <span className="text-[#4A3E31] text-lg md:text-2xl">
+  {product.name}
+</span>
                     </nav>
 
-                    <button onClick={() => router.push('/shop')} className="flex items-center gap-4 text-sm font-black uppercase tracking-[0.2em] group order-1 md:order-2 text-[#4A3E31]">
+                    <button onClick={() => router.push('/shop')} className="flex items-center gap-4 text-2xl font-black uppercase tracking-[0.2em] group order-1 md:order-2 text-[#4A3E31]">
                         <span className="border-b-2 border-[#4A3E31] pb-1 group-hover:border-[#8B735B]">العودة للمتجر</span>
                         <div className="w-12 h-12 rounded-full border border-[#EDEAE5] flex items-center justify-center group-hover:bg-[#4A3E31] group-hover:text-white transition-all duration-500">
                             <ArrowRight size={20} />
@@ -237,20 +246,20 @@ export default function ProductDetails() {
                             <div className="flex items-center justify-between">
                                 <h1 className="text-5xl font-serif text-[#4A3E31] leading-tight">{product.name}</h1>
                                 {hasDiscount && (
-                                    <span className="bg-red-50 text-red-600 px-4 py-1 rounded-xl text-xs font-black border border-red-100">
-                                        عرض محدود
-                                    </span>
+                                  <span className="bg-red-50 text-red-600 px-1.5 py-0.5 rounded-md text-[12px] font-black border border-red-100 whitespace-nowrap">
+  عرض محدود
+</span>
                                 )}
                             </div>
 
                             <div className="flex items-center gap-4">
                                 <p className="text-4xl font-black text-[#8B735B] tracking-tighter">
-                                    {discountedPrice.toLocaleString()} ج.م
+                                    {roundedDiscountedPrice.toLocaleString()} ج.م
                                 </p>
                                 {hasDiscount && (
-                                    <p className="text-xl text-[#A6998A] line-through decoration-[#8B735B]/40">
-                                        {product.price.toLocaleString()} ج.م
-                                    </p>
+                                    <del className="text-xl text-[#A6998A] line-through decoration-[#8B735B]/40">
+                                        {roundedPrice.toLocaleString()} ج.م
+                                    </del>
                                 )}
                             </div>
                         </div>
@@ -293,7 +302,7 @@ export default function ProductDetails() {
                             </div>
                         )}
 
-                        {/* اختيار المقاس - تم التعديل ليكون ديناميكياً بناءً على المنتج */}
+                        {/* اختيار المقاس */}
                         {product.sizes && product.sizes.length > 0 && (
                             <div className="space-y-6 text-right pt-4">
                                 <div className="flex justify-between items-end border-b border-[#F7F3F0] pb-4">
@@ -326,8 +335,10 @@ export default function ProductDetails() {
                             </button>
                             <button
                                 onClick={() => {
-                                    addToWishlist(product);
-                                    showAlert(isLiked ? "تمت إزالة القطعة من المفضلة" : "تمت إضافة القطعة للمفضلة", 'success');
+                                    if (product) {
+                                        addToWishlist(product);
+                                        showAlert(isLiked ? "تمت إزالة القطعة من المفضلة" : "تمت إضافة القطعة للمفضلة", 'success');
+                                    }
                                 }}
                                 className={`w-20 flex items-center justify-center border-2 rounded-3xl transition-all py-6 ${isLiked ? 'border-[#A66C6C] bg-red-50 text-[#A66C6C]' : 'border-[#EDEAE5] bg-white text-[#4A3E31] hover:bg-red-50 hover:text-[#A66C6C]'}`}
                             >

@@ -96,11 +96,21 @@ export default function Navbar() {
             <nav className="w-full h-20 bg-white/95 backdrop-blur-md flex items-center justify-between px-6 md:px-12 border-b border-[#EDEAE5] sticky top-0 z-[100]" dir="rtl">
 
                 {/* الروابط (Desktop) */}
-                <div className="hidden md:flex items-center gap-10 text-[11px] uppercase tracking-[0.2em] text-[#8B735B] font-bold">
-                    {navLinks.map((link) => (
-                        <Link key={link.href} href={link.href} className="hover:text-[#4A3E31] transition-colors">{link.name}</Link>
-                    ))}
-                </div>
+               <div className="hidden md:flex items-center gap-10 text-[11px] uppercase tracking-[0.2em] text-[#8B735B] font-bold">
+  {navLinks.map((link) => (
+   <Link
+  key={link.href}
+  href={link.href}
+  className="relative hover:text-[#4A3E31] transition-colors duration-300
+    after:absolute after:-bottom-1 after:right-0
+    after:h-px after:w-0 after:bg-[#4A3E31]
+    after:transition-all after:duration-500 after:ease-out
+    hover:after:w-full"
+>
+  {link.name}
+</Link>
+  ))}
+</div>
 
                 {/* اللوجو */}
                 <Link href="/" className="text-xl md:text-2xl font-serif tracking-widest text-[#4A3E31] absolute left-1/2 -translate-x-1/2">
@@ -148,54 +158,76 @@ export default function Navbar() {
                 <Link href={getTargetLink()} className="flex flex-col items-center text-[#A6998A]"><User size={20} /><span className="text-[8px] font-bold mt-1">حسابي</span></Link>
             </div>
 
-            {/* --- شاشة البحث الكاملة (Mobile & Desktop Overlay) --- */}
-            {isSearchOpen && (
-                <div className="fixed inset-0 bg-white z-[200] p-6 flex flex-col animate-in fade-in duration-200" dir="rtl">
-                    <div className="flex items-center justify-between mb-8">
-                        <span className="font-serif text-xl font-bold text-[#4A3E31]">ابحث عن منتج</span>
-                        <button onClick={() => setIsSearchOpen(false)} className="p-2 bg-[#F7F3F0] rounded-full"><X size={24} /></button>
-                    </div>
+      {isSearchOpen && (
+  <div className="fixed inset-0 z-[200]" dir="rtl" ref={searchRef}>
+    {/* Backdrop */}
+    <div
+      className="absolute inset-0 bg-black/40 backdrop-blur-sm animate-in fade-in duration-200"
+      onClick={() => setIsSearchOpen(false)}
+    />
 
-                    <div className="relative w-full max-w-2xl mx-auto">
-                        <input
-                            autoFocus
-                            type="text"
-                            placeholder="اكتب اسم المنتج هنا..."
-                            className="w-full p-4 pr-12 bg-[#F7F3F0] rounded-2xl outline-none font-bold text-[#4A3E31]"
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                        />
-                        <Search className="absolute right-4 top-4 text-[#8B735B]" size={20} />
-                    </div>
+    {/* Panel */}
+   <div className="absolute top-20 right-0 left-0 bg-white shadow-2xl animate-in slide-in-from-top duration-300 rounded-b-3xl">
+      <div className="max-w-2xl mx-auto px-6 py-6">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <span className="font-serif text-lg font-bold text-[#4A3E31]">ابحث عن منتج</span>
+          <button
+            onClick={() => setIsSearchOpen(false)}
+            className="w-9 h-9 flex items-center justify-center bg-stone-100 rounded-full hover:bg-stone-200 transition-colors"
+          >
+            <X size={18} />
+          </button>
+        </div>
 
-                    <div className="mt-8 overflow-y-auto flex-1 max-w-2xl mx-auto w-full">
-                        {isSearching && <div className="flex justify-center p-10"><Loader2 className="animate-spin text-[#8B735B]" /></div>}
+        {/* Input */}
+        <div className="relative w-full">
+          <input
+            autoFocus
+            type="text"
+            placeholder="اكتب اسم المنتج هنا..."
+            className="w-full p-4 pr-12 bg-[#F7F3F0] rounded-2xl outline-none font-bold text-[#4A3E31] text-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <Search className="absolute right-4 top-4 text-[#8B735B]" size={18} />
+        </div>
 
-                        <div className="grid gap-4">
-                            {searchResults.map((item) => (
-                                <Link
-                                    key={item.id}
-                                    href={`/product/${item.id}`}
-                                    onClick={() => setIsSearchOpen(false)}
-                                    className="flex items-center gap-4 p-3 bg-[#FCFBF9] border border-[#F7F3F0] rounded-2xl hover:bg-white transition-all active:scale-[0.98]"
-                                >
-                                    <div className="w-16 h-20 relative rounded-xl overflow-hidden shrink-0 border border-[#EDEAE5]">
-                                        <Image src={item.images[0]} alt={item.name} fill className="object-cover" />
-                                    </div>
-                                    <div className="flex flex-col">
-                                        <span className="font-black text-[#4A3E31] text-sm">{item.name}</span>
-                                        <span className="text-[#8B735B] font-serif italic text-xs">{item.price.toLocaleString()} ج.م</span>
-                                    </div>
-                                </Link>
-                            ))}
-                        </div>
+        {/* Results */}
+        <div className="mt-4 max-h-[60vh] overflow-y-auto">
+          {isSearching && (
+            <div className="flex justify-center p-10">
+              <Loader2 className="animate-spin text-[#8B735B]" />
+            </div>
+          )}
 
-                        {searchQuery.length > 1 && !isSearching && searchResults.length === 0 && (
-                            <p className="text-center text-gray-400 mt-10 font-serif italic">عذراً، لم نجد ما تبحث عنه.</p>
-                        )}
-                    </div>
+          <div className="grid gap-3 pb-4">
+            {searchResults.map((item) => (
+              <Link
+                key={item.id}
+                href={`/product/${item.id}`}
+                onClick={() => setIsSearchOpen(false)}
+                className="flex items-center gap-4 p-3 bg-[#FCFBF9] border border-[#F7F3F0] rounded-2xl hover:bg-white transition-all active:scale-[0.98]"
+              >
+                <div className="w-14 h-18 relative rounded-xl overflow-hidden shrink-0 border border-[#EDEAE5]">
+                  <img src={item.images[0]} alt={item.name} fill className="object-cover" />
                 </div>
-            )}
+                <div className="flex flex-col">
+                  <span className="font-black text-[#4A3E31] text-sm">{item.name}</span>
+                  <span className="text-[#8B735B] font-serif italic text-xs">{item.price.toLocaleString()} ج.م</span>
+                </div>
+              </Link>
+            ))}
+          </div>
+
+          {searchQuery.length > 1 && !isSearching && searchResults.length === 0 && (
+            <p className="text-center text-gray-400 py-8 font-serif italic">عذراً، لم نجد ما تبحث عنه.</p>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
             {/* --- القائمة الجانبية (Mobile Sidebar) --- */}
             {/* تم رفع الـ z-index هنا إلى z-[400] لضمان الظهور فوق كل شيء */}

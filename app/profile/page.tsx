@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import {
@@ -22,6 +22,7 @@ interface Order {
     status: string;
     total_price: number;
     created_at: string;
+    user_id?: string;
 }
 
 interface StatusDetail {
@@ -38,30 +39,79 @@ export default function ProfilePage() {
     const [loading, setLoading] = useState(true);
     const router = useRouter();
 
+    const fetchLatestOrder = useCallback(async (userId: string) => {
+        const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .select('*')
+            .eq('user_id', userId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+        if (!orderError && orderData) {
+            setLatestOrder(orderData as Order);
+        }
+    }, []);
+
     useEffect(() => {
-        const fetchUserData = async () => {
+        let isMounted = true;
+        let profileChannel: any;
+
+        const initProfile = async () => {
             setLoading(true);
             const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+            
             if (authError || !authUser) {
                 router.push('/login');
                 return;
             }
-            setUser(authUser);
-            const { data: orderData, error: orderError } = await supabase
-                .from('orders')
-                .select('*')
-                .eq('user_id', authUser.id)
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
 
-            if (!orderError && orderData) {
-                setLatestOrder(orderData as Order);
+            if (isMounted) {
+                setUser(authUser);
+                await fetchLatestOrder(authUser.id);
+                setLoading(false);
             }
-            setLoading(false);
+
+            // تفعيل الـ Realtime لمراقبة تحديثات الأدمن لايف من الداش بورد
+            profileChannel = supabase
+                .channel(`profile-order-live-${authUser.id}`)
+                .on(
+                    'postgres_changes',
+                    { 
+                        event: '*', 
+                        schema: 'public', 
+                        table: 'orders',
+                        filter: `user_id=eq.${authUser.id}` 
+                    },
+                    (payload) => {
+                        if (!isMounted) return;
+                        
+                        if (payload.eventType === 'INSERT') {
+                            setLatestOrder(payload.new as Order);
+                        } else if (payload.eventType === 'UPDATE') {
+                            setLatestOrder((prev) => {
+                                if (!prev || payload.new.id === prev.id || new Date(payload.new.created_at) >= new Date(prev.created_at)) {
+                                    return payload.new as Order;
+                                }
+                                return prev;
+                            });
+                        } else if (payload.eventType === 'DELETE') {
+                            setLatestOrder((prev) => prev?.id === payload.old.id ? null : prev);
+                        }
+                    }
+                )
+                .subscribe();
         };
-        fetchUserData();
-    }, [router]);
+
+        initProfile();
+
+        return () => {
+            isMounted = false;
+            if (profileChannel) {
+                supabase.removeChannel(profileChannel);
+            }
+        };
+    }, [router, fetchLatestOrder]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -69,13 +119,35 @@ export default function ProfilePage() {
         router.refresh();
     };
 
+    // القاموس الذكي لتفسير حالات الأوردر للعميل بشكل منطقي ومريح
     const getStatusDetails = (status: string): StatusDetail => {
         const statuses: Record<string, StatusDetail> = {
-            'pending': { text: 'قيد المراجعة', icon: <Clock size={18} />, color: 'text-orange-700', bg: 'bg-orange-100', accent: 'bg-orange-500' },
-            'shipped': { text: 'جاري التوصيل', icon: <Truck size={18} />, color: 'text-blue-700', bg: 'bg-blue-100', accent: 'bg-blue-500' },
-            'completed': { text: 'تم التسليم', icon: <CheckCircle size={18} />, color: 'text-emerald-700', bg: 'bg-emerald-100', accent: 'bg-emerald-500' }
+            // المرحلة 1: العميل طلب وبانتظار مراجعة الإدارة
+            'pending': { 
+                text: 'قيد المراجعة والتحضير', 
+                icon: <Clock size={18} />, 
+                color: 'text-orange-700', 
+                bg: 'bg-orange-100', 
+                accent: 'bg-orange-500' 
+            },
+            // المرحلة 2: الأدمن داس "اعتماد" والطلب خرج لشركة الشحن
+            'completed': { 
+                text: 'تم الاعتماد - جاري التوصيل إليكِ', 
+                icon: <Truck size={18} />, 
+                color: 'text-blue-700', 
+                bg: 'bg-blue-100', 
+                accent: 'bg-blue-500' 
+            },
+            // المرحلة 3: الطلب تم تسليمه فعلياً للمشتري بنجاح
+            'delivered': { 
+                text: 'تم التسليم بنجاح ✨', 
+                icon: <CheckCircle size={18} />, 
+                color: 'text-emerald-700', 
+                bg: 'bg-emerald-100', 
+                accent: 'bg-emerald-500' 
+            }
         };
-        return statuses[status] || { text: 'تحت المعالجة...', icon: <Package size={18} />, color: 'text-slate-700', bg: 'bg-slate-100', accent: 'bg-slate-500' };
+        return statuses[status] || { text: 'جاري التجهيز...', icon: <Package size={18} />, color: 'text-stone-700', bg: 'bg-stone-100', accent: 'bg-stone-500' };
     };
 
     if (loading) return (
@@ -96,10 +168,9 @@ export default function ProfilePage() {
                     <p className="text-[#A6998A] text-lg italic">مساحتك الخاصة لمتابعة الأناقة</p>
                 </header>
 
-                {/* Grid Layout Fix */}
                 <div className="flex flex-col lg:flex-row gap-8 items-start">
 
-                    {/* القائمة الجانبية (Right in RTL) */}
+                    {/* القائمة الجانبية */}
                     <aside className="w-full lg:w-72 order-2 lg:order-1">
                         <div className="bg-white p-6 rounded-3xl border border-[#EDEAE5] shadow-sm space-y-6">
                             <div className="flex items-center justify-between pb-4 border-b border-[#FCFBF9]">
@@ -132,7 +203,7 @@ export default function ProfilePage() {
                         </div>
                     </aside>
 
-                    {/* المحتوى الرئيسي (Left in RTL) */}
+                    {/* المحتوى الرئيسي */}
                     <div className="flex-1 space-y-8 order-1 lg:order-2 w-full">
 
                         {/* Info Cards Row */}
@@ -157,12 +228,15 @@ export default function ProfilePage() {
                             <section className="bg-white p-6 rounded-3xl border border-[#EDEAE5] shadow-sm">
                                 <div className="flex items-center gap-3 mb-6">
                                     <Package size={18} className="text-[#8B735B]" />
-                                    <span className="text-[#4A3E31] font-black text-xs uppercase tracking-widest">آخر طلب</span>
+                                    <span className="text-[#4A3E31] font-black text-xs uppercase tracking-widest">حالة طلبك الحالي (تحديث مباشر)</span>
                                 </div>
                                 {latestOrder ? (
                                     <div className="space-y-4">
-                                        <div className={`p-3 rounded-xl text-center font-bold text-xs ${getStatusDetails(latestOrder.status).bg} ${getStatusDetails(latestOrder.status).color}`}>
-                                            {getStatusDetails(latestOrder.status).text}
+                                        <div className={`p-3 rounded-xl text-center font-bold text-xs transition-colors duration-500 ${getStatusDetails(latestOrder.status).bg} ${getStatusDetails(latestOrder.status).color}`}>
+                                            <div className="flex items-center justify-center gap-2">
+                                                {getStatusDetails(latestOrder.status).icon}
+                                                <span>{getStatusDetails(latestOrder.status).text}</span>
+                                            </div>
                                         </div>
                                         <div className="flex justify-between text-xs font-mono text-[#4A3E31]">
                                             <span>#{latestOrder.id.slice(0, 8).toUpperCase()}</span>
@@ -190,7 +264,7 @@ export default function ProfilePage() {
                                 <div className="pt-6 border-t border-white/10 w-full flex justify-around">
                                     <div className="text-center">
                                         <p className="text-white/40 text-[10px] uppercase font-black">إجمالي المشتريات</p>
-                                        <p className="text-xl font-black">{latestOrder?.total_price || 0} EGP</p>
+                                        <p className="text-xl font-black">{Math.round(latestOrder?.total_price || 0).toLocaleString()} EGP</p>
                                     </div>
                                     <div className="text-center">
                                         <p className="text-white/40 text-[10px] uppercase font-black">العضوية</p>
@@ -207,5 +281,3 @@ export default function ProfilePage() {
         </main>
     );
 }
-
-

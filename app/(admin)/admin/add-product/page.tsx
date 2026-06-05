@@ -1,14 +1,14 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
-import Image from 'next/image'; // تحسين الأداء بالصور
+import Image from 'next/image'; 
 import { Upload, Plus, X, Loader2, CheckCircle2, AlertCircle, Tag, Ruler } from 'lucide-react';
 
 export default function AddProduct() {
     const [loading, setLoading] = useState(false);
     const [images, setImages] = useState<File[]>([]);
     const [previews, setPreviews] = useState<string[]>([]);
-    const formRef = useRef<HTMLFormElement>(null); // مرجع للوصول لعناصر النموذج برمجياً
+    const formRef = useRef<HTMLFormElement>(null); 
 
     const [alert, setAlert] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
         show: false,
@@ -16,7 +16,6 @@ export default function AddProduct() {
         type: 'success'
     });
 
-    // استخدام useCallback لمنع تكرار الـ Effect وحل مشكلة Dependency
     const hideAlert = useCallback(() => {
         setAlert(prev => ({ ...prev, show: false }));
     }, []);
@@ -50,7 +49,6 @@ export default function AddProduct() {
         setPreviews(prev => prev.filter((_, i) => i !== index));
     };
 
-    // دالة لملء المقاسات برمجياً
     const quickSetSizes = (sizeString: string) => {
         if (formRef.current) {
             const sizesInput = formRef.current.elements.namedItem('sizes') as HTMLInputElement;
@@ -95,7 +93,7 @@ export default function AddProduct() {
                 price: parseFloat(formData.get('price') as string),
                 discount: discountInput ? parseFloat(discountInput) : 0,
                 description: formData.get('description'),
-                category: formData.get('category'),
+                category: (formData.get('category') as string).trim(), // حفظ القسم المكتوب يدوياً
                 images: imageUrls,
                 sizes: sizesInput ? sizesInput.split(',').map(s => s.trim()) : [],
                 colors: colorsInput ? colorsInput.split(',').map(c => c.trim()) : [],
@@ -119,10 +117,8 @@ export default function AddProduct() {
     return (
         <div className="max-w-4xl mx-auto space-y-12 py-16 px-6 text-right font-sans" dir="rtl">
 
-            {/* Custom Alert */}
             {alert.show && (
-                <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-100 min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'
-                    }`}>
+                <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[200] min-w-[320px] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 ${alert.type === 'success' ? 'bg-white border-green-100 text-green-800' : 'bg-white border-red-100 text-red-800'}`}>
                     {alert.type === 'success' ? <CheckCircle2 className="text-green-500" /> : <AlertCircle className="text-red-500" />}
                     <p className="text-sm font-bold flex-1">{alert.msg}</p>
                     <button onClick={hideAlert} className="opacity-50 hover:opacity-100">
@@ -167,14 +163,10 @@ export default function AddProduct() {
                         <input name="name" required placeholder="مثلاً: عباءة كريب ملكي" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
 
+                    {/* تعديل الحقل ليصبح حقل كتابة يدوي نصي بناء على طلبك */}
                     <div className="space-y-2">
-                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">القسم</label>
-                        <select name="category" className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none cursor-pointer font-bold text-[#4A3E31]">
-                            <option value="فساتين">فساتين</option>
-                            <option value="الأساسيات">الأساسيات</option>
-                            <option value="جاكيتات">جاكيتات</option>
-                            <option value="جديد">جديد</option>
-                        </select>
+                        <label className="text-[10px] font-black uppercase tracking-widest text-gray-400">القسم (اكتب اسم القسم يدوياً)</label>
+                        <input name="category" required placeholder="مثلاً: فساتين، جاكيتات، أساسيات..." className="w-full bg-[#F7F3F0] border-transparent p-4 rounded-2xl outline-none focus:bg-white focus:ring-2 focus:ring-black/5 transition-all font-bold text-[#4A3E31]" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

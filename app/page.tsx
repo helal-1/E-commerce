@@ -5,7 +5,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowUp,
-  MessageCircle,
   Truck,
   ShieldCheck,
   Gift,
@@ -13,7 +12,8 @@ import {
   Plus,
   Camera,
   ArrowRight,
-  Tag
+  Tag,
+  MessageCircle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import Link from 'next/link';
@@ -127,16 +127,30 @@ export default function Home() {
     <main className="w-full z-0 bg-white text-right font-sans overflow-x-hidden" dir="rtl">
 
       {/* Floating UI */}
-      <div className="fixed bottom-8 left-8 z-30 flex flex-col gap-4">
-        {showScrollTop && (
-          <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="w-12 h-12 bg-black text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 transition-all active:scale-95">
+      <div 
+    className="z-50 flex flex-col gap-4 items-center"
+    style={{ position: 'fixed', bottom: '90px', left: '24px' }} // قعدناهم فوق شريط التنقل بمساحة مستريحة ومثالية
+>
+    {/* زر الصعود للأعلى بحجم كبير وواضح */}
+    {showScrollTop && (
+        <button 
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} 
+            className="w-14 h-14 bg-black text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 animate-in fade-in zoom-in-75"
+        >
             <ArrowUp size={24} />
-          </button>
-        )}
-        {/* <a href="https://wa.me/201092882189" target="_blank" rel="noopener noreferrer" className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 transition-all">
-          <MessageCircle size={32} />
-        </a> */}
-      </div>
+        </button>
+    )}
+
+    {/* زر الواتساب العائم بحجم كبير يطابق زر الصعود */}
+    <a 
+        href="https://wa.me/201092882189" 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 active:scale-95 transition-all duration-300"
+    >
+        <MessageCircle size={28} />
+    </a>
+</div>
 
       {/* 1. Hero Section */}
       <section ref={heroRef} className="relative w-full z-0 h-screen flex items-center justify-center overflow-hidden bg-black">
@@ -329,8 +343,8 @@ export default function Home() {
                     {hasDisc && <span className="flex items-center gap-1 text-[9px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100"><Tag size={8} /> -{disc}%</span>}
                   </div>
                   <div className="flex items-center justify-center gap-3">
-                    <span className="text-sm font-black text-[#8B735B]">{finalP.toLocaleString()} ج.م</span>
-                    {hasDisc && <span className="text-[10px] text-gray-400 line-through">{product.price.toLocaleString()} ج.م</span>}
+                  <span className="text-sm font-black text-[#8B735B] line-through">{Math.round(finalP).toLocaleString()} ج.م</span>
+{hasDisc && <del className="text-[10px] text-gray-400 line-through">{Math.round(product.price).toLocaleString()} ج.م</del>}
                   </div>
                 </div>
               </Link>
@@ -352,9 +366,9 @@ export default function Home() {
           {instaImages.map((src, i) => (
             <div key={i} className="relative w-64 h-64 md:w-80 md:h-80 shrink-0 rounded-3xl overflow-hidden group">
               <Image src={src} alt="Community" fill sizes="(max-width: 768px) 256px, 320px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
-              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                <Camera size={30} className="text-white" />
-              </div>
+              <Link href="#" className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+  <Camera size={30} className="text-white" />
+</Link>
             </div>
           ))}
         </div>

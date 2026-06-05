@@ -10,7 +10,8 @@ import {
     User,
     Package,
     Loader2,
-    Printer
+    Printer,
+    CheckCircle2
 } from 'lucide-react';
 
 interface OrderItem {
@@ -67,6 +68,21 @@ export default function ShippingPage() {
         return () => { isMounted = false; };
     }, [fetchShippingOrders]);
 
+    // دالة تحديث حالة الطلب إلى "تم التسليم" لكي يسمع فوراً في بروفايل العميل لايف
+    const handleDeliverOrder = async (orderId: string) => {
+        const { error } = await supabase
+            .from('orders')
+            .update({ status: 'delivered' })
+            .eq('id', orderId);
+
+        if (!error) {
+            // إزالة الأوردر من المعاينة الحالية لصفحة الشحن لأنه اكتمل بنجاح
+            setOrders(prev => prev.filter(o => o.id !== orderId));
+        } else {
+            alert("حدث خطأ أثناء تحديث حالة الشحنة: " + error.message);
+        }
+    };
+
     const removeOrder = async () => {
         if (!showConfirm.id) return;
         const orderId = showConfirm.id;
@@ -83,12 +99,21 @@ export default function ShippingPage() {
         }
     };
 
-    // دالة الطباعة الاحترافية باستخدام Iframe لتجنب أخطاء React Hooks Immutability
+    // دالة تهيئة رقم الهاتف لفتح شات الواتساب مباشرة بكود مصر الدولي
+    const formatWhatsAppLink = (phone: string) => {
+        let cleanPhone = phone.replace(/\D/g, ''); 
+        if (cleanPhone.startsWith('01')) {
+            cleanPhone = '20' + cleanPhone.substring(1);
+        } else if (cleanPhone.startsWith('1')) {
+            cleanPhone = '20' + cleanPhone;
+        }
+        return `https://wa.me/${cleanPhone}`;
+    };
+
     const handlePrint = (orderId: string) => {
         const printContent = document.getElementById(`print-invoice-${orderId}`);
         if (!printContent) return;
 
-        // إنشاء iframe مخفي للطباعة
         const iframe = document.createElement('iframe');
         iframe.style.position = 'fixed';
         iframe.style.right = '0';
@@ -101,7 +126,6 @@ export default function ShippingPage() {
         const doc = iframe.contentWindow?.document || iframe.contentDocument;
         if (!doc) return;
 
-        // إضافة المحتوى للـ iframe مع الستاييل
         const htmlContent = `
             <html dir="rtl">
                 <head>
@@ -142,7 +166,6 @@ export default function ShippingPage() {
             iframeWindow.document.write(htmlContent);
             iframeWindow.document.close();
 
-            // الانتظار قليلاً للتأكد من تحميل المحتوى ثم الطباعة
             setTimeout(() => {
                 iframeWindow.focus();
                 iframeWindow.print();
@@ -153,7 +176,6 @@ export default function ShippingPage() {
 
     return (
         <div className="p-4 md:p-8 bg-[#FAFAFA] min-h-screen text-right font-sans" dir="rtl">
-
             <div className="max-w-6xl mx-auto">
                 <header className="flex items-center gap-4 mb-12 animate-in fade-in slide-in-from-top-4 duration-700">
                     <div className="w-14 h-14 bg-black text-white rounded-3xl flex items-center justify-center shadow-2xl">
@@ -171,24 +193,35 @@ export default function ShippingPage() {
                             <Loader2 className="animate-spin mb-4" size={40} />
                             <p className="font-bold">جاري تحميل الشحنات...</p>
                         </div>
+                    ) : orders.length === 0 ? (
+                        /* واجهة فارغة (Empty State) فخمة ومريحة عند عدم وجود شحنات */
+                        <div className="flex flex-col items-center justify-center py-32 px-4 bg-white border border-gray-100 rounded-[2.5rem] shadow-sm text-center animate-in fade-in zoom-in-95 duration-500">
+                            <div className="w-20 h-20 bg-gray-50 text-gray-400 rounded-full flex items-center justify-center mb-6 border border-gray-100/50">
+                                <Package size={36} className="opacity-70" />
+                            </div>
+                            <h3 className="text-xl font-black text-gray-800 mb-2">قائمة الشحن نظيفة</h3>
+                            <p className="text-gray-400 text-sm max-w-sm leading-relaxed">
+                                لا توجد أي طلبات تحت التوصيل حالياً. جميع الشحنات تم تسليمها أو بانتظار الاعتماد.
+                            </p>
+                        </div>
                     ) : orders.map((order, index) => (
                         <div key={order.id}
                             style={{ animationDelay: `${index * 100}ms` }}
-                            className="bg-white border border-gray-100 rounded-3xl p-8 shadow-sm hover:shadow-xl transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
+                            className="bg-white border border-gray-100 rounded-3xl p-6 md:p-8 shadow-sm hover:shadow-xl transition-all duration-500 animate-in fade-in slide-in-from-bottom-4">
 
-                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-10">
-                                <div className="space-y-4">
+                            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8 items-center">
+                                <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-gray-300">
                                         <User size={14} />
                                         <span className="text-[10px] font-black uppercase">Recipient</span>
                                     </div>
                                     <div>
-                                        <p className="font-black text-lg text-gray-900 mb-2">{order.customer_name}</p>
+                                        <p className="font-black text-lg text-gray-900 mb-1 leading-tight">{order.customer_name}</p>
                                         <p className="text-sm font-bold text-gray-400">{order.customer_phone}</p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     <div className="flex items-center gap-2 text-gray-300">
                                         <MapPin size={14} />
                                         <span className="text-[10px] font-black uppercase">Destination</span>
@@ -199,15 +232,15 @@ export default function ShippingPage() {
                                     </div>
                                 </div>
 
-                                <div className="space-y-4 lg:col-span-1">
-                                    <div className="flex items-center gap-2 text-gray-300 mb-2">
+                                <div className="space-y-3">
+                                    <div className="flex items-center gap-2 text-gray-300 mb-1">
                                         <Package size={14} />
                                         <span className="text-[10px] font-black uppercase">Items</span>
                                     </div>
-                                    <div className="space-y-3">
+                                    <div className="space-y-2 max-h-[120px] overflow-y-auto pr-1 custom-scrollbar">
                                         {order.items?.map((item, i) => (
-                                            <div key={`${order.id}-${i}`} className="flex items-center gap-3 bg-gray-50/50 p-3 rounded-2xl border border-gray-50 group hover:bg-white transition-all">
-                                                <div className="w-12 h-16 rounded-xl overflow-hidden shrink-0 shadow-sm relative">
+                                            <div key={`${order.id}-${i}`} className="flex items-center gap-3 bg-gray-50/50 p-2.5 rounded-2xl border border-gray-50 hover:bg-white transition-all">
+                                                <div className="w-10 h-14 rounded-xl overflow-hidden shrink-0 shadow-sm relative">
                                                     <Image
                                                         src={(item.image || item.images?.[0]) || '/placeholder.png'}
                                                         alt={item.name}
@@ -215,49 +248,55 @@ export default function ShippingPage() {
                                                         className="object-cover"
                                                     />
                                                 </div>
-                                                <div className="flex flex-col">
-                                                    <span className="text-[11px] font-black text-gray-800 line-clamp-1">{item.name}</span>
-                                                    <div className="flex gap-2 mt-1.5">
-                                                        <span className="text-[9px] font-black px-2 py-0.5 bg-white rounded-md border border-gray-100 text-gray-400 italic">M: {item.size}</span>
-                                                        <span className="text-[9px] font-black px-2 py-0.5 bg-white rounded-md border border-gray-100 text-amber-900/40 uppercase">C: {item.color}</span>
+                                                <div className="flex flex-col flex-1 min-w-0">
+                                                    <span className="text-[11px] font-black text-gray-800 truncate">{item.name}</span>
+                                                    <div className="flex gap-2 mt-1">
+                                                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-white rounded-md border border-gray-100 text-gray-400">قماش: {item.size}</span>
+                                                        <span className="text-[9px] font-black px-1.5 py-0.5 bg-white rounded-md border border-gray-100 text-[#8B735B]">لون: {item.color}</span>
                                                     </div>
                                                 </div>
                                             </div>
                                         ))}
                                     </div>
-                                    <div className="pt-3 border-t border-gray-50 flex justify-between items-center">
+                                    <div className="pt-2 border-t border-gray-50 flex justify-between items-center">
                                         <span className="text-[10px] font-black text-gray-300 uppercase">Total</span>
-                                        <p className="font-black text-sm text-black">{order.total_price} EGP</p>
+                                        <p className="font-black text-sm text-black">{Math.round(order.total_price).toLocaleString()} EGP</p>
                                     </div>
                                 </div>
 
-                                <div className="flex lg:flex-col justify-center gap-4">
+                                <div className="flex flex-col gap-2 w-full border-t lg:border-t-0 pt-4 lg:pt-0 border-gray-50">
+                                    <button
+                                        onClick={() => handleDeliverOrder(order.id)}
+                                        className="w-full flex items-center justify-center gap-2 bg-[#8B735B] text-white py-3 rounded-2xl font-black text-[11px] tracking-wide hover:bg-[#A6998A] transition-all shadow-md active:scale-[0.98]"
+                                    >
+                                        <CheckCircle2 size={16} /> تم التسليم للعميل
+                                    </button>
+
                                     <button
                                         onClick={() => handlePrint(order.id)}
-                                        className="flex-1 flex items-center justify-center gap-3 bg-black text-white py-5 rounded-3xl font-black text-xs hover:bg-gray-800 transition-all shadow-xl active:scale-95"
+                                        className="w-full flex items-center justify-center gap-2 bg-black text-white py-3 rounded-2xl font-black text-[11px] tracking-wide hover:bg-gray-800 transition-all shadow-md active:scale-[0.98]"
                                     >
-                                        <Printer size={20} /> طباعة البوليصة
+                                        <Printer size={16} /> طباعة البوليصة
                                     </button>
 
                                     <a
-                                        href={`https://wa.me/${order.customer_phone.replace(/\D/g, '').replace(/^00/, '')}`}
+                                        href={formatWhatsAppLink(order.customer_phone)}
                                         target="_blank"
                                         rel="noopener noreferrer"
-                                        className="flex-1 flex items-center justify-center gap-3 bg-green-500 text-white py-5 rounded-3xl font-black text-xs hover:bg-green-600 transition-all shadow-xl shadow-green-500/20 active:scale-95"
+                                        className="w-full flex items-center justify-center gap-2 bg-green-500 text-white py-3 rounded-2xl font-black text-[11px] tracking-wide hover:bg-green-600 transition-all shadow-md shadow-green-500/10 active:scale-[0.98]"
                                     >
-                                        <MessageCircle size={20} /> تواصل واتساب
+                                        <MessageCircle size={16} /> تواصل واتساب
                                     </a>
 
                                     <button
                                         onClick={() => setShowConfirm({ show: true, id: order.id })}
-                                        className="flex-1 flex items-center justify-center gap-3 bg-white text-red-500 border-2 border-red-50 py-5 rounded-3xl font-black text-xs hover:bg-red-500 hover:text-white transition-all active:scale-95"
+                                        className="w-full flex items-center justify-center gap-2 bg-white text-red-500 border border-red-100 py-2.5 rounded-2xl font-black text-[11px] tracking-wide hover:bg-red-50 hover:border-red-200 transition-all active:scale-[0.98]"
                                     >
-                                        <Trash2 size={20} /> إزالة الشحنة
+                                        <Trash2 size={15} /> إزالة الشحنة
                                     </button>
                                 </div>
                             </div>
 
-                            {/* مكون بوليصة الشحن (مخفي برمجياً عن الصفحة) */}
                             <div style={{ display: 'none' }}>
                                 <div id={`print-invoice-${order.id}`} className="p-10 font-sans" dir="rtl">
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '4px solid black', paddingBottom: '1.5rem', marginBottom: '2rem' }}>
@@ -309,7 +348,7 @@ export default function ShippingPage() {
                                             <p style={{ fontSize: '1.875rem', fontWeight: 900 }}>CASH ON DELIVERY</p>
                                         </div>
                                         <div style={{ textAlign: 'left' }}>
-                                            <p style={{ fontSize: '2.25rem', fontWeight: 900 }}>{order.total_price} EGP</p>
+                                            <p style={{ fontSize: '2.25rem', fontWeight: 900 }}>{Math.round(order.total_price).toLocaleString()} EGP</p>
                                         </div>
                                     </div>
                                 </div>

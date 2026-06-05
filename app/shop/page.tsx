@@ -25,7 +25,7 @@ interface Product {
     id: string;
     name: string;
     price: number;
-    discount?: number; // الحقل الجديد للخصم (نسبة مئوية)
+    discount?: number; 
     category: string;
     colors?: string[];
     sizes?: string[];
@@ -50,7 +50,7 @@ function ShopContent() {
     const [currentPage, setCurrentPage] = useState(1);
     const productsPerPage = 6;
 
-    // تثبيت التصنيف الابتدائي بدون Effect متكرر
+    // تثبيت التصنيف الابتدائي متوافقاً مع المكتوب يدوياً
     const [category, setCategory] = useState(() => {
         if (!initialCategory) return 'الكل';
         const categoryMap: { [key: string]: string } = {
@@ -62,7 +62,6 @@ function ShopContent() {
     });
 
     const fetchProducts = useCallback(async () => {
-        setLoading(true);
         try {
             const { data, error } = await supabase
                 .from('products')
@@ -73,15 +72,16 @@ function ShopContent() {
             setProducts((data as Product[]) || []);
         } catch (error) {
             console.error("Error fetching products:", error);
-        } finally {
-            setLoading(false);
         }
     }, []);
 
     useEffect(() => {
         let isMounted = true;
+        
         const load = async () => {
-            if (isMounted) await fetchProducts();
+            setLoading(true);
+            await fetchProducts();
+            if (isMounted) setLoading(false);
         };
         load();
 
@@ -110,6 +110,17 @@ function ShopContent() {
             supabase.removeChannel(shopChannel);
         };
     }, [fetchProducts]);
+
+    // استخراج التصنيفات المكتوبة يدوياً داخل المنتجات ديناميكياً 100% ومنع التكرار
+    const categoryOptions = useMemo(() => {
+        const list = ['الكل'];
+        products.forEach(p => {
+            if (p.category && !list.includes(p.category)) {
+                list.push(p.category);
+            }
+        });
+        return list;
+    }, [products]);
 
     const filteredProducts = useMemo(() => {
         return products.filter(p =>
@@ -231,7 +242,7 @@ function ShopContent() {
                                 </button>
                             </div>
                             <div className="flex flex-col gap-2">
-                                {['الكل', 'فساتين', 'الأساسيات', 'جاكيتات', 'جديد'].map((cat) => (
+                                {categoryOptions.map((cat) => (
                                     <button
                                         key={cat}
                                         onClick={() => handleCategoryChange(cat)}
@@ -273,22 +284,23 @@ function ShopContent() {
                             }`}>
                             {currentProducts.map((product) => {
                                 const isLiked = wishlist.some((item) => item.id === product.id);
-                                // حساب السعر بعد الخصم
-                                const discountedPrice = product.discount
+                                const rawDiscountedPrice = product.discount
                                     ? product.price - (product.price * (product.discount / 100))
                                     : product.price;
+
+                                // تقريب الأسعار لأرقام صحيحة تماماً لبراند فخم بدون كسور قروش
+                                const roundedPrice = Math.round(product.price);
+                                const roundedDiscountedPrice = Math.round(rawDiscountedPrice);
 
                                 return (
                                     <div key={product.id} className="group relative animate-in fade-in duration-700">
                                         <div className="relative aspect-3/4 bg-[#F7F3F0] overflow-hidden mb-4 rounded-4xl border border-[#EDEAE5]/50 group-hover:border-[#8B735B]/30 transition-all duration-500">
-                                            {/* شارة الخصم على الصورة */}
                                             {product.discount && product.discount > 0 && (
                                                 <div className="absolute top-4 right-4 z-20 bg-red-600 text-white px-3 py-1.5 rounded-full text-[10px] font-black shadow-lg animate-bounce">
                                                     خصم {product.discount}%
                                                 </div>
                                             )}
 
-                                            {/* اسم القسم على الصورة */}
                                             <div className="absolute top-4 left-4 z-20 bg-white/80 backdrop-blur-md text-[#4A3E31] px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter border border-white/20">
                                                 {product.category}
                                             </div>
@@ -324,7 +336,6 @@ function ShopContent() {
                                                 <div className="flex flex-col gap-1">
                                                     <div className="flex items-center justify-between gap-2">
                                                         <h3 className="text-lg font-serif text-[#4A3E31] group-hover:text-[#8B735B] transition-colors truncate">{product.name}</h3>
-                                                        {/* نسبة الخصم بجانب الاسم */}
                                                         {product.discount && (
                                                             <span className="flex items-center gap-1 text-[10px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100 shrink-0">
                                                                 <Tag size={10} /> -{product.discount}%
@@ -334,13 +345,12 @@ function ShopContent() {
 
                                                     <div className="flex items-center gap-3">
                                                         <span className="text-base font-black text-[#8B735B]">
-                                                            {discountedPrice.toLocaleString()} ج.م
+                                                            {roundedDiscountedPrice.toLocaleString()} ج.م
                                                         </span>
-                                                        {/* السعر القديم إذا وجد خصم */}
                                                         {product.discount && (
-                                                            <span className="text-xs text-[#A6998A] line-through decoration-[#8B735B]/50">
-                                                                {product.price.toLocaleString()} ج.م
-                                                            </span>
+                                                            <del className="text-xs text-[#A6998A] line-through decoration-[#8B735B]/50">
+                                                                {roundedPrice.toLocaleString()} ج.م
+                                                            </del>
                                                         )}
                                                     </div>
                                                 </div>

@@ -197,9 +197,9 @@ export default function OrdersPage() {
                 {/* --- نافذة تفاصيل المنتجات (Modal) --- */}
                 {selectedOrder && (
                     <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
-                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
+                        <div className="absolute  inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
                         <div className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                            <div className="p-8 border-b flex justify-between items-center bg-gray-50/50">
+                            <div className="p-8  mt-8 border-b flex justify-between items-center bg-gray-50/50">
                                 <h2 className="text-xl font-black text-gray-900">مراجعة الطلبية #{selectedOrder.id.slice(0, 8)}</h2>
                                 <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={20} /></button>
                             </div>
