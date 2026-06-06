@@ -11,10 +11,10 @@ import {
     CreditCard,
     Loader2,
     Eye,
-    X
+    X,
+    Wallet
 } from 'lucide-react';
 
-// تعريف الأنواع بدقة لمنع أخطاء الـ Any
 interface OrderItem {
     name: string;
     image?: string;
@@ -43,9 +43,8 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [processingId, setProcessingId] = useState<string | null>(null);
-    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null); // مودال التفاصيل
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
-    // نظام إشعارات الديسك توب
     const sendSystemNotification = useCallback((order: Order) => {
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
             new Notification("طلب جديد من Zelda Line! ✨", {
@@ -92,7 +91,7 @@ export default function OrdersPage() {
                 new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3').play().catch(() => { });
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                loadData(); // تحديث القائمة في أي تغيير آخر
+                loadData();
             })
             .subscribe();
 
@@ -129,10 +128,11 @@ export default function OrdersPage() {
         setSelectedOrder(null);
     };
 
+    // ✅ التعديل هنا: التصفية تعرض 'pending' و 'pending_payment' معاً
     const filteredOrders = orders.filter(order => {
         const matchesSearch = order.customer_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             order.customer_phone.includes(searchTerm);
-        return matchesSearch && order.status === 'pending';
+        return matchesSearch && (order.status === 'pending' || order.status === 'pending_payment');
     });
 
     return (
@@ -163,9 +163,22 @@ export default function OrdersPage() {
                                 <div className="w-12 h-12 bg-black/5 rounded-2xl flex items-center justify-center text-black">
                                     <Package size={24} />
                                 </div>
-                                <div>
-                                    <h3 className="font-black text-sm text-gray-900">#{order.id.slice(0, 8)} - {order.customer_name}</h3>
-                                    <p className="text-xs text-gray-400 font-bold">{order.city} | {order.total_price} ج.م</p>
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-3 flex-wrap">
+                                        <h3 className="font-black text-sm text-gray-900">#{order.id.slice(0, 8)} - {order.customer_name}</h3>
+                                        
+                                        {/* ✅ تم إضافة شارات واضحة لطريقة الدفع وحالة الطلب لحسابات أدق */}
+                                        {order.status === 'pending_payment' ? (
+                                            <span className="inline-flex p-1 items-center gap-1 bg-amber-50 text-amber-700 px-2.5 py-1 rounded-xl text-[10px] font-black border border-amber-100">
+                                                <Wallet size={12} /> محفظة كاش (انتظار التحويل)
+                                            </span>
+                                        ) : (
+                                            <span className="inline-flex items-center gap-1 p-1 bg-blue-50 text-blue-700 px-2.5 py-1 rounded-xl text-[10px] font-black border border-blue-100">
+                                                الدفع عند الاستلام
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-xs text-gray-400 font-bold mt-1">{order.city} | {order.total_price} ج.م</p>
                                 </div>
                             </div>
 
@@ -196,10 +209,10 @@ export default function OrdersPage() {
 
                 {/* --- نافذة تفاصيل المنتجات (Modal) --- */}
                 {selectedOrder && (
-                    <div className="fixed inset-0 z-100 flex items-center justify-center p-4">
-                        <div className="absolute  inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelectedOrder(null)} />
                         <div className="relative bg-white w-full max-w-2xl rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
-                            <div className="p-8  mt-8 border-b flex justify-between items-center bg-gray-50/50">
+                            <div className="p-8 mt-8 border-b flex justify-between items-center bg-gray-50/50">
                                 <h2 className="text-xl font-black text-gray-900">مراجعة الطلبية #{selectedOrder.id.slice(0, 8)}</h2>
                                 <button onClick={() => setSelectedOrder(null)} className="p-2 hover:bg-white rounded-full transition-colors"><X size={20} /></button>
                             </div>

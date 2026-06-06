@@ -1,25 +1,22 @@
 "use client";
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useCart } from '../context/CartContext';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image'; 
+import Image from 'next/image';
 import {
-    MapPin,
-    Phone,
-    User,
-    Mail,
-    ArrowRight,
-    CheckCircle2,
-    ShoppingBag,
-    Truck,
-    Wallet,
-    AlertCircle,
-    X
+    MapPin, Phone, User, Mail, ArrowRight, CheckCircle2,
+    ShoppingBag, Truck, Wallet, AlertCircle, X, MessageCircle,
+    Upload, ImageIcon, Loader2
 } from 'lucide-react';
 
+const WHATSAPP_SUPPORT_NUMBER = "201092882189";
+const WALLET_NUMBER = "01092882189";
+const RECEIPTS_BUCKET = "payment-receipts";
+const MAX_RECEIPT_SIZE_MB = 5;
+
 interface CartItem {
-    id: string;
+    id: string | number;
     name: string;
     price: number;
     quantity: number;
@@ -33,21 +30,25 @@ export default function CheckoutPage() {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [orderCompleted, setOrderCompleted] = useState(false);
+    const [completedOrderId, setCompletedOrderId] = useState<string | null>(null);
     const [paymentMethod, setPaymentMethod] = useState<'cod' | 'wallet'>('cod');
+    const [copied, setCopied] = useState(false);
+    
+    // ✅ حفظ السعر قبل تفريغ السلة لمنع ظهور القيمة صفر
+    const [savedTotal, setSavedTotal] = useState<number>(0);
+
+    // 📸 حالة رفع الإيصال
+    const [receiptFile, setReceiptFile] = useState<File | null>(null);
+    const [receiptPreview, setReceiptPreview] = useState<string | null>(null);
+    const [uploadingReceipt, setUploadingReceipt] = useState(false);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [formData, setFormData] = useState({
-        name: '',
-        phone: '',
-        email: '',
-        city: '',
-        address: ''
+        name: '', phone: '', email: '', city: '', address: ''
     });
 
-    // حالة التنبيه المخصص (Custom Alert) بدل بتاع المتصفح
     const [alertState, setAlertState] = useState<{ show: boolean; msg: string; type: 'success' | 'error' }>({
-        show: false,
-        msg: '',
-        type: 'success'
+        show: false, msg: '', type: 'success'
     });
 
     const showAlert = (msg: string, type: 'success' | 'error') => {
@@ -55,9 +56,103 @@ export default function CheckoutPage() {
         setTimeout(() => setAlertState(prev => ({ ...prev, show: false })), 5000);
     };
 
+    const handleCopyWallet = async () => {
+        try {
+            await navigator.clipboard.writeText(WALLET_NUMBER);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch {
+            showAlert("تعذر نسخ الرقم، انسخه يدوياً", "error");
+        }
+    };
+
+    // 📸 اختيار صورة الإيصال
+    const handleReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!file.type.startsWith('image/')) {
+            showAlert("الرجاء اختيار صورة فقط (JPG / PNG)", "error");
+            return;
+        }
+        if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) {
+            showAlert(`حجم الصورة لا يجب أن يتجاوز ${MAX_RECEIPT_SIZE_MB} ميجابايت`, "error");
+            return;
+        }
+
+        setReceiptFile(file);
+        const reader = new FileReader();
+        reader.onloadend = () => setReceiptPreview(reader.result as string);
+        reader.readAsDataURL(file);
+    };
+
+    const handleRemoveReceipt = () => {
+        setReceiptFile(null);
+        setReceiptPreview(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    // 🟢 إرسال الإيصال للواتساب (مع رفع للستوريدج)
+    const handleSendReceipt = async () => {
+        if (!receiptFile) {
+            showAlert("يرجى رفع صورة إيصال التحويل أولاً", "error");
+            return;
+        }
+
+        setUploadingReceipt(true);
+        try {
+            const ext = receiptFile.name.split('.').pop() || 'jpg';
+            const safeExt = ext.replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
+            const filePath = `${completedOrderId}/${Date.now()}.${safeExt}`;
+
+          const { error: uploadError } = await supabase
+    .storage
+    .from(RECEIPTS_BUCKET)
+    .upload(filePath, receiptFile, { // يفضل إرسال الـ file مباشرة أو كـ blob
+        cacheControl: '3600',
+        upsert: false,
+        contentType: receiptFile.type,
+    });
+
+            if (uploadError) throw uploadError;
+
+            const { data: publicData } = supabase
+                .storage
+                .from(RECEIPTS_BUCKET)
+                .getPublicUrl(filePath);
+
+            const receiptUrl = publicData.publicUrl;
+
+            // 3) تحديث الطلب بلينك الإيصال والحفاظ على حالة 'pending_payment' لكي لا يختفي عند الـ Admin
+            if (completedOrderId) {
+                await supabase
+                    .from('orders')
+                    .update({ receipt_url: receiptUrl, status: 'pending_payment' })
+                    .eq('id', completedOrderId);
+            }
+
+            const msg =
+`مرحباً زيلدا لاين 👋
+لقد قمت بتحويل مبلغ ${savedTotal.toLocaleString()} ج.م للطلب رقم #${completedOrderId?.slice(0, 8)}.
+
+📎 إيصال التحويل:
+${receiptUrl}`;
+
+            window.open(
+                `https://wa.me/${WHATSAPP_SUPPORT_NUMBER}?text=${encodeURIComponent(msg)}`,
+                '_blank'
+            );
+            showAlert("تم رفع الإيصال بنجاح وتوجيهك للدعم ✓", "success");
+        } catch (err) {
+            const e = err as Error;
+            showAlert(`تعذر رفع الإيصال: ${e.message}`, "error");
+        } finally {
+            setUploadingReceipt(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
         if (loading || cartItems.length === 0) return;
         setLoading(true);
 
@@ -65,329 +160,390 @@ export default function CheckoutPage() {
             const { data: { user } } = await supabase.auth.getUser();
             const finalTotal = Math.round(subtotal);
 
-            // إنتاج مفتاح الأمان لمنع تكرار الويب هوك والسيرفر
-            const uniqueIdempotencyKey = `wallet_${formData.phone}_${finalTotal}_${cartItems.length}_${Math.floor(Date.now() / 1000)}`;
+            const basePayload = {
+                customer_name: formData.name,
+                customer_phone: formData.phone,
+                customer_email: formData.email,
+                city: formData.city,
+                address: formData.address,
+                total_price: finalTotal,
+                items: cartItems,
+                user_id: user?.id || null,
+            };
 
-            // --- الحالة الأولى: الدفع عند الاستلام (COD) ---
             if (paymentMethod === 'cod') {
-                const { error } = await supabase
+                const { data: orderData, error } = await supabase
                     .from('orders')
-                    .insert([{
-                        customer_name: formData.name,
-                        customer_phone: formData.phone,
-                        customer_email: formData.email,
-                        city: formData.city,
-                        address: formData.address,
-                        total_price: finalTotal,
-                        status: 'pending',
-                        items: cartItems,
-                        user_id: user?.id || null,
-                        payment_id: 'COD'
-                    }]);
+                    .insert([{ ...basePayload, status: 'pending', payment_id: 'COD' }])
+                    .select('id')
+                    .single();
 
                 if (error) throw error;
 
+                setSavedTotal(finalTotal);
+                setCompletedOrderId(orderData?.id ?? null);
                 setOrderCompleted(true);
                 clearCart();
                 setTimeout(() => router.push('/'), 5000);
+            } else {
+                const { data: orderData, error: orderError } = await supabase
+                    .from('orders')
+                    .insert([{ ...basePayload, status: 'pending_payment', payment_id: 'WALLET_PENDING' }])
+                    .select('id')
+                    .single();
 
-            // --- الحالة الثانية: الدفع الإلكتروني (المحافظ) ---
-            } else if (paymentMethod === 'wallet') {
-                const response = await fetch('/api/checkout', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        customer_name: formData.name,
-                        customer_phone: formData.phone,
-                        customer_email: formData.email,
-                        city: formData.city,
-                        address: formData.address,
-                        total_price: finalTotal,
-                        items: cartItems,
-                        user_id: user?.id || null,
-                        idempotency_key: uniqueIdempotencyKey
-                    })
-                });
+                if (orderError) throw orderError;
 
-                const paymentResult = await response.json();
-
-                if (!paymentResult.success) {
-                    throw new Error(paymentResult.message || "فشلت عملية إنشاء رابط الدفع الإلكتروني");
-                }
-
+                // ✅ حفظ القيمة الإجمالية أولاً قبل تفريغ السلة ومسح المنتجات
+                setSavedTotal(finalTotal);
+                setCompletedOrderId(orderData?.id ?? null);
+                setOrderCompleted(true);
                 clearCart();
-
-                if (paymentResult.redirectUrl) {
-                    window.location.href = paymentResult.redirectUrl;
-                } else {
-                    setOrderCompleted(true);
-                    setTimeout(() => router.push('/'), 5000);
-                }
             }
-
         } catch (error: unknown) {
             const err = error as Error;
-            // استخدام التنبيه الفخم المخصص هنا عند حدوث خطأ
             showAlert(err.message, 'error');
             setLoading(false);
         }
     };
 
+    // ═══════════════════════════════════════════════════════════
+    // ✅ شاشات النجاح
+    // ═══════════════════════════════════════════════════════════
     if (orderCompleted) {
-        return (
-            <div className="min-h-screen bg-white flex items-center justify-center p-4" dir="rtl">
-                <div className="max-w-md w-full text-center space-y-6 animate-in fade-in zoom-in duration-500">
-                    <div className="w-24 h-24 bg-green-50 rounded-full flex items-center justify-center mx-auto text-green-500">
-                        <CheckCircle2 size={48} strokeWidth={1.5} />
-                    </div>
-                    <h1 className="text-3xl font-black text-gray-900 tracking-tighter">تم استلام طلبك بنجاح!</h1>
-                    <p className="text-gray-500 leading-relaxed font-medium">
-                        {paymentMethod === 'cod' 
-                            ? `شكراً لكِ على اختيارنا. تم تسجيل طلبك بنجاح وسنقوم بالتواصل معكِ لتأكيد الشحن الفوري على رقم الهاتف المرفق.`
-                            : `شكراً لكِ على اختيارنا. ستصلك رسالة تأكيد على البريد الإلكتروني فور مراجعة وتأكيد عملية التحويل.`
-                        }
-                    </p>
-                    <div className="pt-4">
-                        <button onClick={() => router.push('/')} className="text-xs font-black uppercase tracking-[0.2em] text-gray-400 hover:text-black transition-colors border-b border-gray-200 pb-1">
-                            العودة للتسوق
+        if (paymentMethod === 'wallet') {
+            return (
+                <div className="min-h-screen bg-white flex items-center justify-center p-4" dir="rtl">
+                    <div className="max-w-md w-full text-center space-y-6 animate-in fade-in zoom-in duration-500 bg-[#FAFAFA] p-8 rounded-[2.5rem] border border-gray-100 shadow-xl">
+
+                        <div className="w-20 h-20 rounded-full bg-green-50 text-green-500 flex items-center justify-center mx-auto">
+                            <Wallet size={40} strokeWidth={1.5} />
+                        </div>
+
+                        <div className="space-y-2">
+                            <h1 className="text-2xl font-black text-gray-900 tracking-tighter">طلبك مسجل وجاهز للدفع!</h1>
+                            <p className="text-xs text-gray-400 font-bold">رقم الطلب: #{completedOrderId?.slice(0, 8)}</p>
+                        </div>
+
+                        {/* 📋 كارت رقم المحفظة والسعر الصحيح المحفوظ */}
+                        <div className="bg-white p-6 rounded-3xl border border-gray-100 text-right space-y-4 shadow-sm relative overflow-hidden">
+                            <div className="absolute top-0 left-0 bg-red-600 text-white px-3 py-1 rounded-bl-2xl text-[9px] font-black uppercase tracking-wider">
+                                فودافون كاش
+                            </div>
+                            <div className="flex justify-between items-center pt-4 border-t border-stone-100/60">
+                                <span className="text-xs font-bold text-stone-500">المبلغ المطلوب تحويله:</span>
+                                <span className="text-xl font-black text-stone-900 font-serif">
+                                    {savedTotal.toLocaleString()} <span className="text-xs font-black">ج.م</span>
+                                </span>
+                            </div>
+                            <div className="space-y-1">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">رقم المحفظة المعتمد</span>
+                                <div className="flex items-center justify-between bg-gray-50 p-3 rounded-xl border mt-1">
+                                    <span className="font-black text-gray-950 tracking-widest text-base">{WALLET_NUMBER}</span>
+                                    <button
+                                        onClick={handleCopyWallet}
+                                        className="text-[10px] bg-black text-white px-3 py-1.5 rounded-lg font-black hover:bg-gray-800 transition-colors"
+                                    >
+                                        {copied ? "تم النسخ ✓" : "نسخ الرقم"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 📸 رفع صورة الإيصال */}
+                        <div className="bg-white p-5 rounded-3xl border border-gray-100 text-right space-y-3 shadow-sm">
+                            <div className="flex items-center justify-between">
+                                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+                                    صورة إيصال التحويل
+                                </span>
+                                <span className="text-[9px] font-bold text-gray-300">
+                                    JPG / PNG · حتى {MAX_RECEIPT_SIZE_MB}MB
+                                </span>
+                            </div>
+
+                            <input
+                                ref={fileInputRef}
+                                type="file"
+                                accept="image/*"
+                                onChange={handleReceiptChange}
+                                className="hidden"
+                            />
+
+                            {!receiptPreview ? (
+                                <button
+                                    type="button"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="w-full border-2 border-dashed border-gray-200 hover:border-black hover:bg-gray-50 rounded-2xl py-6 flex flex-col items-center justify-center gap-2 transition-colors"
+                                >
+                                    <Upload size={22} className="text-gray-400" />
+                                    <span className="text-xs font-black text-gray-700">اضغط لرفع صورة الإيصال</span>
+                                    <span className="text-[10px] font-bold text-gray-400">Screenshot من تطبيق المحفظة</span>
+                                </button>
+                            ) : (
+                                <div className="relative rounded-2xl overflow-hidden border border-gray-100 bg-gray-50">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={receiptPreview}
+                                        alt="إيصال التحويل"
+                                        className="w-full max-h-64 object-contain bg-gray-50"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={handleRemoveReceipt}
+                                        className="absolute top-2 left-2 bg-black/80 text-white rounded-full p-1.5 hover:bg-black transition-colors"
+                                        aria-label="إزالة الصورة"
+                                    >
+                                        <X size={14} />
+                                    </button>
+                                    <div className="absolute bottom-2 right-2 bg-white/90 backdrop-blur px-2 py-1 rounded-lg flex items-center gap-1.5">
+                                        <ImageIcon size={12} className="text-gray-700" />
+                                        <span className="text-[10px] font-black text-gray-700 truncate max-w-[150px]">
+                                            {receiptFile?.name}
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        <p className="text-xs text-gray-400 leading-relaxed font-bold px-4">
+                            * بعد تحويل المبلغ من محفظتك، ارفع صورة الإيصال هنا واضغط الزر بالأسفل لإرسالها للدعم وتفعيل الطلب فوراً.
+                        </p>
+
+                        <button
+                            onClick={handleSendReceipt}
+                            disabled={!receiptFile || uploadingReceipt}
+                            className="w-full bg-[#25D366] text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-[#1ebe5d] transition-colors shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                            {uploadingReceipt ? (
+                                <>
+                                    <Loader2 size={18} className="animate-spin" />
+                                    جاري رفع الإيصال...
+                                </>
+                            ) : (
+                                <>
+                                    <MessageCircle size={18} />
+                                    إرسال الإيصال للدعم
+                                </>
+                            )}
+                        </button>
+
+                        <button
+                            onClick={() => router.push('/')}
+                            className="text-xs text-gray-400 font-bold hover:text-gray-700 transition-colors"
+                        >
+                            العودة للرئيسية
                         </button>
                     </div>
+                </div>
+            );
+        }
+
+        // ✅ شاشة نجاح الـ COD
+        return (
+            <div className="min-h-screen bg-white flex items-center justify-center p-4" dir="rtl">
+                <div className="max-w-md w-full text-center space-y-6 animate-in fade-in zoom-in duration-500 bg-[#FAFAFA] p-8 rounded-[2.5rem] border border-gray-100 shadow-xl">
+                    <div className="w-20 h-20 rounded-full bg-green-50 text-green-500 flex items-center justify-center mx-auto">
+                        <CheckCircle2 size={40} strokeWidth={1.5} />
+                    </div>
+                    <div className="space-y-2">
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tighter">تم تأكيد طلبك بنجاح!</h1>
+                        <p className="text-xs text-gray-400 font-bold">رقم الطلب: #{completedOrderId?.slice(0, 8)}</p>
+                    </div>
+                    <p className="text-sm text-gray-500 font-bold leading-relaxed">
+                        هيتم التواصل معاك خلال 24 ساعة لتأكيد الطلب والشحن. شكراً لثقتك في زيلدا لاين 🖤
+                    </p>
+                    <p className="text-[10px] text-gray-300 font-bold">سيتم تحويلك للرئيسية تلقائياً...</p>
                 </div>
             </div>
         );
     }
 
+    // ═══════════════════════════════════════════════════════════
+    // 📝 فورم الـ Checkout
+    // ═══════════════════════════════════════════════════════════
     return (
-        <div className="min-h-screen bg-[#FAFAFA] pb-20 font-sans relative" dir="rtl">
-            
-            {/* 🔔 Custom Premium Alert Component */}
+        <div className="min-h-screen bg-white" dir="rtl">
             {alertState.show && (
-                <div className={`fixed top-10 left-1/2 -translate-x-1/2 z-[999] min-w-[320px] max-w-[90%] flex items-center gap-3 p-4 rounded-2xl shadow-2xl border animate-in slide-in-from-top duration-300 bg-white ${
-                    alertState.type === 'success' ? 'border-green-100 text-green-800' : 'border-red-100 text-red-800'
-                }`}>
-                    {alertState.type === 'success' ? <CheckCircle2 className="text-green-500 shrink-0" /> : <AlertCircle className="text-red-500 shrink-0" />}
-                    <p className="text-xs font-bold flex-1 leading-relaxed text-right">{alertState.msg}</p>
-                    <button onClick={() => setAlertState(prev => ({ ...prev, show: false }))} className="opacity-40 hover:opacity-100 transition-opacity mr-2">
+                <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-white border border-gray-200 shadow-2xl rounded-2xl px-5 py-3 flex items-center gap-3 max-w-md w-[90%]">
+                    {alertState.type === 'success' ? <CheckCircle2 className="text-green-500" size={20} /> : <AlertCircle className="text-red-500" size={20} />}
+                    <p className="text-xs font-bold text-gray-800 flex-1">{alertState.msg}</p>
+                    <button onClick={() => setAlertState(prev => ({ ...prev, show: false }))} className="opacity-40 hover:opacity-100 transition-opacity">
                         <X size={16} />
                     </button>
                 </div>
             )}
 
-            <div className="bg-white border-b sticky top-0 z-50">
-                <div className="max-w-7xl mx-auto px-4 h-20 flex items-center justify-between">
+            <div className="max-w-6xl mx-auto px-4 py-8">
+                <div className="flex items-center gap-4 mb-8">
                     <button onClick={() => router.back()} className="p-2 hover:bg-gray-50 rounded-full transition-colors text-gray-900">
-                        <ArrowRight size={22} />
+                        <ArrowRight size={20} />
                     </button>
-                    <div className="flex flex-col items-center">
-                        <span className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-400">Checkout</span>
-                        <h1 className="text-lg font-serif font-black text-gray-900">إتمام الشراء</h1>
+                    <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Checkout</p>
+                        <h1 className="text-2xl font-black text-gray-900 tracking-tighter">إتمام الشراء</h1>
                     </div>
-                    <div className="w-10" />
                 </div>
-            </div>
 
-            <div className="max-w-7xl mx-auto px-4 py-8 md:py-12">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
+                <form onSubmit={handleSubmit} className="grid lg:grid-cols-3 gap-8">
+                    <div className="lg:col-span-2 space-y-6">
+                        {/* 01 — تفاصيل المستلم */}
+                        <div className="bg-[#FAFAFA] p-6 rounded-3xl border border-gray-100 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-black bg-black text-white px-2 py-1 rounded-md">01</span>
+                                <h2 className="text-sm font-black text-gray-900 tracking-tight">تفاصيل المستلم</h2>
+                            </div>
 
-                    <div className="lg:col-span-7 space-y-8">
-                        <section className="bg-white p-8 rounded-4xl border border-gray-100 shadow-sm transition-all hover:shadow-md">
-                            <h2 className="text-lg font-black mb-8 flex items-center gap-4 text-gray-900">
-                                <span className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs shadow-lg shadow-black/20">01</span>
-                                تفاصيل المستلم
-                            </h2> 
-
-                            <form id="checkout-form" onSubmit={handleSubmit} className="space-y-6">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">الاسم الكامل</label>
-                                        <div className="relative">
-                                            <User className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-                                            <input
-                                                required
-                                                type="text"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
-                                                placeholder="الاسم الثلاثي لضمان وصول الشحنة"
-                                                value={formData.name}
-                                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">رقم الكاش (أو رقم التواصل)</label>
-                                        <div className="relative">
-                                            <Phone className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-                                            <input
-                                                required
-                                                type="tel"
-                                                pattern="^01[0125][0-9]{8}$"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
-                                                placeholder="رقم التواصل أو المحفظة الإلكترونية"
-                                                value={formData.phone}
-                                                onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                            />
-                                        </div>
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">الاسم الكامل</label>
+                                    <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 gap-2">
+                                        <User size={16} className="text-gray-400" />
+                                        <input required type="text" placeholder="الاسم بالكامل"
+                                            value={formData.name}
+                                            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                            className="flex-1 py-3 text-sm font-bold bg-transparent outline-none" />
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">البريد الإلكتروني</label>
-                                    <div className="relative">
-                                        <Mail className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-                                        <input
-                                            required
-                                            type="email"
-                                            className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
-                                            placeholder="example@domain.com"
-                                            value={formData.email}
-                                            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                        />
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">رقم الكاش (أو رقم التواصل)</label>
+                                    <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 gap-2">
+                                        <Phone size={16} className="text-gray-400" />
+                                        <input required type="tel" placeholder="01XXXXXXXXX"
+                                            value={formData.phone}
+                                            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                            className="flex-1 py-3 text-sm font-bold bg-transparent outline-none" />
                                     </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">المحافظة / المدينة</label>
-                                        <div className="relative">
-                                            <MapPin className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-300" size={18} />
-                                            <input
-                                                required
-                                                type="text"
-                                                className="w-full pr-12 pl-4 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
-                                                placeholder="القاهرة، الإسكندرية..."
-                                                value={formData.city}
-                                                onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] font-black text-gray-400 mr-2 uppercase tracking-widest text-right block">العنوان التفصيلي</label>
-                                        <input
-                                            required
-                                            type="text"
-                                            className="w-full px-6 py-4 bg-gray-50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-black/5 focus:ring-0 outline-none transition-all text-sm font-bold text-right"
-                                            placeholder="رقم الشقة، الدور، اسم الشارع"
-                                            value={formData.address}
-                                            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                        />
-                                    </div>
-                                </div>
-                            </form>
-                        </section>
-
-                        <section className="bg-white p-8 rounded-4xl border border-gray-100 shadow-sm space-y-6">
-                            <h2 className="text-lg font-black mb-4 flex items-center gap-4 text-gray-900">
-                                <span className="w-10 h-10 bg-black text-white rounded-2xl flex items-center justify-center text-xs shadow-lg shadow-black/20">02</span>
-                                طريقة الدفع
-                            </h2>
-                            
-                            <div 
-                                onClick={() => !loading && setPaymentMethod('cod')}
-                                className={`p-6 border-2 rounded-4xl flex justify-between items-center cursor-pointer transition-all ${
-                                    paymentMethod === 'cod' ? 'border-black bg-black/5' : 'border-gray-100 hover:border-gray-300'
-                                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                <div className="flex items-center gap-5">
-                                    <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center text-white shadow-xl shadow-black/10">
-                                        <Truck size={24} />
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-black text-sm text-gray-900">الدفع عند الاستلام (كاش)</p>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">Cash on delivery</p>
-                                    </div>
-                                </div>
-                                <div className="w-6 h-6 border-[3px] border-black rounded-full flex items-center justify-center">
-                                    {paymentMethod === 'cod' && <div className="w-2.5 h-2.5 bg-black rounded-full" />}
                                 </div>
                             </div>
 
-                            <div 
-                                onClick={() => !loading && setPaymentMethod('wallet')}
-                                className={`p-6 border-2 rounded-4xl flex justify-between items-center cursor-pointer transition-all ${
-                                    paymentMethod === 'wallet' ? 'border-black bg-black/5' : 'border-gray-100 hover:border-gray-300'
-                                } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
-                            >
-                                <div className="flex items-center gap-5">
-                                    <div className="w-14 h-14 bg-black rounded-2xl flex items-center justify-center text-white shadow-xl shadow-black/10">
-                                        <Wallet size={24} />
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="font-black text-sm text-gray-900">المحافظ الإلكترونية (فودافون كاش، اتصالات، أورنج)</p>
-                                        <p className="text-[10px] text-gray-400 font-bold uppercase mt-1 tracking-wider">Mobile Wallets & Vodafone Cash</p>
-                                    </div>
-                                </div>
-                                <div className="w-6 h-6 border-[3px] border-black rounded-full flex items-center justify-center">
-                                    {paymentMethod === 'wallet' && <div className="w-2.5 h-2.5 bg-black rounded-full" />}
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">البريد الإلكتروني</label>
+                                <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 gap-2">
+                                    <Mail size={16} className="text-gray-400" />
+                                    <input required type="email" placeholder="you@domain.com"
+                                        value={formData.email}
+                                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                        className="flex-1 py-3 text-sm font-bold bg-transparent outline-none" />
                                 </div>
                             </div>
-                        </section>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">المحافظة / المدينة</label>
+                                    <div className="flex items-center bg-white border border-gray-200 rounded-xl px-3 gap-2">
+                                        <MapPin size={16} className="text-gray-400" />
+                                        <input required type="text" placeholder="القاهرة"
+                                            value={formData.city}
+                                            onChange={(e) => setFormData({ ...formData, city: e.target.value })}
+                                            className="flex-1 py-3 text-sm font-bold bg-transparent outline-none" />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">العنوان التفصيلي</label>
+                                    <input required type="text" placeholder="الشارع - رقم المبنى - شقة"
+                                        value={formData.address}
+                                        onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                        className="w-full bg-white border border-gray-200 rounded-xl px-3 py-3 text-sm font-bold outline-none" />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* 02 — طريقة الدفع */}
+                        <div className="bg-[#FAFAFA] p-6 rounded-3xl border border-gray-100 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <span className="text-[10px] font-black bg-black text-white px-2 py-1 rounded-md">02</span>
+                                <h2 className="text-sm font-black text-gray-900 tracking-tight">طريقة الدفع</h2>
+                            </div>
+
+                            <div onClick={() => !loading && setPaymentMethod('cod')}
+                                className={`p-6 border-2 rounded-3xl flex justify-between items-center cursor-pointer transition-all ${paymentMethod === 'cod' ? 'border-black bg-black/5' : 'border-gray-100 hover:border-gray-300'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-full bg-white border border-gray-100 flex items-center justify-center">
+                                        <Truck size={20} className="text-gray-700" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-black text-gray-900">الدفع عند الاستلام (كاش)</p>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Cash on delivery</p>
+                                    </div>
+                                </div>
+                                {paymentMethod === 'cod' && <CheckCircle2 size={20} className="text-black" />}
+                            </div>
+
+                            <div onClick={() => !loading && setPaymentMethod('wallet')}
+                                className={`p-6 border-2 rounded-3xl flex justify-between items-center cursor-pointer transition-all ${paymentMethod === 'wallet' ? 'border-black bg-black/5' : 'border-gray-100 hover:border-gray-300'} ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-full bg-white border border-gray-100 flex items-center justify-center">
+                                        <Wallet size={20} className="text-gray-700" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-black text-gray-900">المحافظ الإلكترونية (فودافون كاش، اتصالات، أورنج)</p>
+                                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Mobile Wallets — Smart Pay</p>
+                                        <p className="text-[10px] font-bold text-green-600 mt-1">
+                                            هتظهرلك شاشة فيها رقم المحفظة ورفع الإيصال بضغطة زرار ✓
+                                        </p>
+                                    </div>
+                                </div>
+                                {paymentMethod === 'wallet' && <CheckCircle2 size={20} className="text-black" />}
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="lg:col-span-5">
-                        <div className="bg-white p-8 rounded-4xl border border-gray-100 shadow-2xl sticky top-32">
-                            <div className="flex items-center justify-between mb-8">
-                                <h2 className="text-lg font-black text-gray-900">ملخص الحقيبة</h2>
-                                <ShoppingBag size={20} className="text-gray-300" />
+                    {/* ملخص الحقيبة */}
+                    <div className="lg:col-span-1">
+                        <div className="bg-[#FAFAFA] p-6 rounded-3xl border border-gray-100 space-y-5 sticky top-4">
+                            <div className="flex items-center gap-3">
+                                <ShoppingBag size={18} className="text-gray-700" />
+                                <h2 className="text-sm font-black text-gray-900 tracking-tight">ملخص الحقيبة</h2>
                             </div>
 
-                            <div className="space-y-6 max-h-[40vh] overflow-y-auto pr-2 mb-8 custom-scrollbar">
-                                {cartItems.map((item: any) => (
-                                    <div key={`${item.id}-${item.size}-${item.color}`} className="flex gap-5 group">
-                                        <div className="w-20 h-24 bg-gray-50 rounded-2xl overflow-hidden shrink-0 border border-gray-100 relative">
-                                            <Image
-                                                src={item.image}
-                                                alt={item.name}
-                                                fill
-                                                className="object-cover group-hover:scale-110 transition-transform duration-500"
-                                            />
+                            <div className="space-y-3 max-h-72 overflow-y-auto">
+                                {cartItems.map((item) => (
+                                    <div key={`${item.id}-${item.size}-${item.color}`} className="flex gap-3 items-start">
+                                        <div className="relative w-14 h-14 rounded-xl overflow-hidden bg-white border border-gray-100 shrink-0">
+                                            <Image src={item.image} alt={item.name} fill className="object-cover" />
                                         </div>
-                                        <div className="flex-1 text-right py-1">
-                                            <h4 className="font-bold text-xs text-gray-900 mb-1 leading-relaxed">{item.name}</h4>
-                                            <p className="text-[10px] text-gray-400 font-black mb-2 uppercase tracking-tighter">
-                                                Size: {item.size} / Qty: {item.quantity}
-                                            </p>
-                                            <p className="font-black text-sm text-gray-900">{Math.round(item.price * item.quantity).toLocaleString()} ج.م</p>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-xs font-black text-gray-900 truncate">{item.name}</p>
+                                            <p className="text-[10px] font-bold text-gray-400">Size: {item.size} / Qty: {item.quantity}</p>
+                                            <p className="text-xs font-black text-gray-900 mt-1">{Math.round(item.price * item.quantity).toLocaleString()} ج.م</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
 
-                            <div className="space-y-4 border-t border-gray-50 pt-6">
-                                <div className="flex justify-between text-gray-400 font-bold text-xs uppercase tracking-widest">
+                            <div className="border-t border-gray-100 pt-4 space-y-2">
+                                <div className="flex justify-between text-xs font-bold text-gray-500">
                                     <span>المجموع</span>
-                                    <span className="text-gray-900">{Math.round(subtotal).toLocaleString()} ج.م</span>
+                                    <span>{Math.round(subtotal).toLocaleString()} ج.م</span>
                                 </div>
-                                <div className="flex justify-between text-gray-400 font-bold text-xs uppercase tracking-widest">
+                                <div className="flex justify-between text-xs font-bold text-gray-500">
                                     <span>الشحن</span>
                                     <span className="text-green-600">Free</span>
                                 </div>
-                                <div className="flex justify-between text-2xl font-black pt-6 text-gray-900">
-                                    <span className="font-serif italic text-lg text-gray-400">Total</span>
-                                    <span>{Math.round(subtotal).toLocaleString()} <span className="text-xs font-black mr-1">EGP</span></span>
+                                <div className="flex justify-between text-base font-black text-gray-900 pt-2 border-t border-gray-100">
+                                    <span>Total</span>
+                                    <span>{Math.round(subtotal).toLocaleString()} EGP</span>
                                 </div>
                             </div>
 
-                            <button
-                                form="checkout-form"
-                                type="submit"
-                                disabled={loading || cartItems.length === 0}
-                                className="w-full bg-black text-white py-6 rounded-2xl font-black text-xs uppercase tracking-[0.3em] hover:bg-zinc-800 transition-all shadow-xl shadow-black/10 active:scale-[0.98] mt-10 disabled:opacity-50 disabled:cursor-not-allowed group"
-                            >
+                            <button type="submit" disabled={loading || cartItems.length === 0}
+                                className="w-full bg-black text-white py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-3">
                                 {loading ? (
-                                    <span className="flex items-center justify-center gap-3">
-                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                        {paymentMethod === 'wallet' ? "جاري توليد رابط المحفظة..." : "جاري تسجيل طلبك..."}
-                                    </span>
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        {paymentMethod === 'wallet' ? "جاري تسجيل الطلب..." : "جاري تسجيل طلبك..."}
+                                    </>
                                 ) : (
-                                    paymentMethod === 'wallet' ? "الدفع الإلكتروني وتأكيد الطلب" : "تأكيد طلب الدفع عند الاستلام"
+                                    paymentMethod === 'wallet'
+                                        ? "تأكيد الطلب وعرض بيانات الدفع"
+                                        : "تأكيد طلب الدفع عند الاستلام"
                                 )}
                             </button>
                         </div>
                     </div>
-                </div>
+                </form>
             </div>
         </div>
     );
