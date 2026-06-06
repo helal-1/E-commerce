@@ -72,7 +72,7 @@ export default function CheckoutPage() {
         if (!file) return;
 
         if (!file.type.startsWith('image/')) {
-            showAlert("الرجاء اختيار صورة فقط (JPG / PNG)", "error");
+            showAlert("الرجاء اختيار صورة فقط (JPG / JPEG / PNG)", "error");
             return;
         }
         if (file.size > MAX_RECEIPT_SIZE_MB * 1024 * 1024) {
@@ -103,6 +103,8 @@ export default function CheckoutPage() {
         try {
             const ext = receiptFile.name.split('.').pop() || 'jpg';
             const safeExt = ext.replace(/[^a-z0-9]/gi, '').toLowerCase() || 'jpg';
+   
+            
             const filePath = `${completedOrderId}/${Date.now()}.${safeExt}`;
 
           const { error: uploadError } = await supabase
@@ -264,7 +266,7 @@ ${receiptUrl}`;
                             <input
                                 ref={fileInputRef}
                                 type="file"
-                                accept="image/*"
+                        accept="image/jpeg, image/jpg, image/png"
                                 onChange={handleReceiptChange}
                                 className="hidden"
                             />

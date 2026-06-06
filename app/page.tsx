@@ -28,12 +28,18 @@ interface Product {
   images: string[];
 }
 
+interface CategoryCard {
+  name: string;
+  image: string;
+}
+
 const CDN_URL = "https://mcliojobvbbepdmxqchs.supabase.co/storage/v1/object/public/products-images/";
 
 export default function Home() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const heroRef = useRef<HTMLDivElement>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<CategoryCard[]>([]);
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -67,11 +73,42 @@ export default function Home() {
     if (error) console.error("Error fetching products:", error);
   }, []);
 
+const fetchCategories = useCallback(async () => {
+  const { data } = await supabase
+    .from('products')
+    .select('category, images')
+    .order('created_at', { ascending: false });
+
+  if (!data) return;
+
+  // ← ضيف السطر ده مؤقتاً
+  console.log('RAW DATA:', JSON.stringify(data[0]));
+
+  const seen = new Map<string, string>();
+  data.forEach((p) => {
+    let imgs = p.images;
+    if (typeof imgs === 'string') {
+      try { imgs = JSON.parse(imgs); } catch { imgs = [imgs]; }
+    }
+    const firstImage = Array.isArray(imgs) ? imgs[0] : null;
+
+    // ← وده كمان
+    console.log('Category:', p.category, '| firstImage:', firstImage);
+
+    if (p.category && !seen.has(p.category) && firstImage) {
+      seen.set(p.category, firstImage);
+    }
+  });
+
+  setCategories(
+    Array.from(seen.entries()).map(([name, image]) => ({ name, image }))
+  );
+}, []);
   useEffect(() => {
-    // الحل النهائي: نضع كل ما يخص الـ State داخل الاطار القادم
     const mountFrame = requestAnimationFrame(() => {
       setMounted(true);
-      fetchProducts(); // استدعاء الجلب هنا يحل مشكلة الـ ESLint تماماً
+      fetchProducts();
+      fetchCategories();
     });
 
     const productSubscription = supabase
@@ -81,6 +118,7 @@ export default function Home() {
         { event: '*', schema: 'public', table: 'products' },
         () => {
           fetchProducts();
+          fetchCategories();
         }
       )
       .subscribe();
@@ -110,7 +148,7 @@ export default function Home() {
       clearInterval(textInterval);
       supabase.removeChannel(productSubscription);
     };
-  }, [heroWords, fetchProducts]);
+  }, [heroWords, fetchProducts, fetchCategories]);
 
   const scroll = (direction: 'left' | 'right') => {
     if (scrollRef.current) {
@@ -127,30 +165,27 @@ export default function Home() {
     <main className="w-full z-0 bg-white text-right font-sans overflow-x-hidden" dir="rtl">
 
       {/* Floating UI */}
-      <div 
-    className="z-50 flex flex-col gap-4 items-center"
-    style={{ position: 'fixed', bottom: '90px', left: '24px' }} // قعدناهم فوق شريط التنقل بمساحة مستريحة ومثالية
->
-    {/* زر الصعود للأعلى بحجم كبير وواضح */}
-    {showScrollTop && (
-        <button 
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} 
+      <div
+        className="z-50 flex flex-col gap-4 items-center"
+        style={{ position: 'fixed', bottom: '90px', left: '24px' }}
+      >
+        {showScrollTop && (
+          <button
+            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
             className="w-14 h-14 bg-black text-white rounded-full flex items-center justify-center shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 animate-in fade-in zoom-in-75"
-        >
+          >
             <ArrowUp size={24} />
-        </button>
-    )}
-
-    {/* زر الواتساب العائم بحجم كبير يطابق زر الصعود */}
-    <a 
-        href="https://wa.me/201092882189" 
-        target="_blank" 
-        rel="noopener noreferrer" 
-        className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 active:scale-95 transition-all duration-300"
-    >
-        <MessageCircle size={28} />
-    </a>
-</div>
+          </button>
+        )}
+        <a
+          href="https://wa.me/201092882189"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-14 h-14 bg-[#25D366] text-white rounded-full flex items-center justify-center shadow-2xl hover:rotate-12 hover:scale-110 active:scale-95 transition-all duration-300"
+        >
+          <MessageCircle size={28} />
+        </a>
+      </div>
 
       {/* 1. Hero Section */}
       <section ref={heroRef} className="relative w-full z-0 h-screen flex items-center justify-center overflow-hidden bg-black">
@@ -189,7 +224,6 @@ export default function Home() {
             <Link href="/shop" className="group flex items-center gap-4 bg-white text-black px-16 py-5 text-xs font-black uppercase tracking-widest hover:bg-stone-200 transition-all shadow-2xl rounded-full">
               تسوقي الآن <ArrowRight size={16} className="group-hover:-translate-x-1 transition-transform" />
             </Link>
-
             <Link href="/collections" className="w-full md:w-auto border border-white/30 bg-white/10 backdrop-blur-md text-white px-16 py-5 text-xs font-black uppercase tracking-widest hover:bg-white/20 transition-all rounded-full">
               التشكيلات
             </Link>
@@ -247,12 +281,7 @@ export default function Home() {
               />
               <div className="absolute top-[30%] right-[40%] group/item">
                 <div className="w-8 h-8 bg-white/30 backdrop-blur-md rounded-full flex items-center justify-center animate-pulse cursor-pointer border border-white/50">
-                  <Plus size={16} className="text-white" />
-                </div>
-                <div className="absolute right-10 top-0 bg-white p-4 rounded-2xl shadow-xl w-48 opacity-0 group-hover/item:opacity-100 transition-opacity pointer-events-none z-50">
-                  <p className="text-[10px] font-black text-stone-400 uppercase tracking-tighter">عباءة &quot;لين&quot;</p>
-                  <p className="text-sm font-serif">كريب كوري فاخر</p>
-                  <p className="text-xs font-black mt-2">450 ر.س</p>
+                  <a href="shop"><Plus size={16} className="text-white" /></a>
                 </div>
               </div>
             </div>
@@ -274,26 +303,91 @@ export default function Home() {
         </div>
       </section>
 
-      {/* 5. Categories Grid */}
-      <section className="py-24 z-0 px-6 md:px-12 bg-stone-50">
-        <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-          <Link href="/shop" className="relative group overflow-hidden h-150 rounded-[3rem] shadow-xl">
-            <Image src="/Gemini_Generated_Image_xuxhhuxuxhhuxuxh.png" alt="Abayas" fill sizes="(max-width: 768px) 100vw, 33vw" className="object-cover transition-transform duration-1000 group-hover:scale-110" />
-            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/50 transition-all flex flex-col items-center justify-center text-white p-12 text-center">
-              <h3 className="text-4xl font-serif mb-4">العبايات</h3>
-              <span className="text-[10px] font-black tracking-widest uppercase py-3 px-6 border border-white/30 rounded-full group-hover:bg-white group-hover:text-black transition-all">اكتشفي الآن</span>
-            </div>
-          </Link>
-          <Link href="/collections" className="relative group overflow-hidden md:col-span-2 h-150 rounded-[3rem] shadow-xl">
-            <Image src="/3f2e5d1738c222a00d35d6fcb52db56b.jpg" alt="Occasions" fill sizes="(max-width: 768px) 100vw, 66vw" className="object-cover transition-transform duration-1000 group-hover:scale-110" />
-            <div className="absolute inset-0 bg-black/20 group-hover:bg-black/50 transition-all flex flex-col items-center justify-center text-white p-12 text-center">
-              <h3 className="text-5xl font-serif mb-4">فساتين المناسبات</h3>
-              <span className="text-[10px] font-black tracking-widest uppercase py-3 px-6 border border-white/30 rounded-full group-hover:bg-white group-hover:text-black transition-all">تسوقي المجموعة</span>
-            </div>
-          </Link>
-        </div>
-      </section>
+     {/* 5. Browse By Style */}
+{/* ====== Browse By Style ====== */}
+<section className="py-8 px-6 md:px-12 bg-[#f0efed]">
+  <div className="text-center mb-8">
+    <h2
+      className="text-2xl md:text-3xl font-black uppercase tracking-tight text-[#1a1a1a] mb-3"
+      style={{ fontFamily: 'Georgia, serif' }}
+    >
+      تصفحي حسب الستايل
+    </h2>
+    <div className="flex items-center justify-center gap-3">
+      <div style={{ height: '1px', width: '50px', backgroundColor: 'rgba(0,0,0,0.2)' }} />
+      <div style={{ height: '4px', width: '28px', backgroundColor: '#c0392b', borderRadius: '99px' }} />
+      <div style={{ height: '1px', width: '50px', backgroundColor: 'rgba(0,0,0,0.2)' }} />
+    </div>
+  </div>
 
+  {/* ديسك توب فقط */}
+  <div className="hidden md:block max-w-5xl mx-auto space-y-3">
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.6fr 1fr 1.6fr', gap: '10px' }}>
+      {categories.slice(0, 4).map((cat) => (
+        <Link
+          key={cat.name}
+          href={`/shop?category=${encodeURIComponent(cat.name)}`}
+          className="relative rounded-2xl overflow-hidden group cursor-pointer"
+          style={{ height: '220px' }}
+        >
+          <img src={cat.image} alt={cat.name} className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+          <div className="absolute top-2 right-2 z-10">
+            <span className="font-bold text-white text-xs px-3 py-1.5 rounded-lg animate-pulse" style={{ backgroundColor: '#c0392b', fontFamily: 'Georgia, serif' }}>
+              {cat.name}
+            </span>
+          </div>
+        </Link>
+      ))}
+    </div>
+
+    {categories.length > 4 && (
+      <div style={{ display: 'grid', gridTemplateColumns: '1.6fr 1fr 1.6fr 1fr', gap: '10px' }}>
+        {categories.slice(4).map((cat) => (
+          <Link
+            key={cat.name}
+            href={`/shop?category=${encodeURIComponent(cat.name)}`}
+            className="relative rounded-2xl overflow-hidden group cursor-pointer"
+            style={{ height: '180px' }}
+          >
+            <img src={cat.image} alt={cat.name} className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+            <div className="absolute top-2 right-2 z-10">
+              <span className="font-bold text-white text-xs px-3 py-1.5 rounded-lg animate-pulse" style={{ backgroundColor: '#c0392b', fontFamily: 'Georgia, serif' }}>
+                {cat.name}
+              </span>
+            </div>
+          </Link>
+        ))}
+      </div>
+    )}
+  </div>
+</section>
+
+{/* موبايل - برا الـ section عشان السكرول يشتغل */}
+<div
+  className="md:hidden bg-[#f0efed] pb-6"
+  style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}
+>
+  <div className="flex gap-3 px-6" style={{ width: 'max-content' }}>
+    {categories.map((cat) => (
+      <Link
+        key={cat.name}
+        href={`/shop?category=${encodeURIComponent(cat.name)}`}
+        className="relative flex-shrink-0 rounded-2xl overflow-hidden group"
+        style={{ width: '160px', height: '200px' }}
+      >
+        <img src={cat.image} alt={cat.name} className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+        <div className="absolute top-2 right-2 z-10">
+          <span className="font-bold text-white text-xs px-2 py-1 rounded-lg animate-pulse" style={{ backgroundColor: '#c0392b', fontFamily: 'Georgia, serif' }}>
+            {cat.name}
+          </span>
+        </div>
+      </Link>
+    ))}
+  </div>
+</div>
       {/* 6. Featured Products (وصلنا حديثاً) */}
       <section className="py-32 z-0 bg-white overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 mb-20 flex justify-between items-end">
@@ -343,8 +437,8 @@ export default function Home() {
                     {hasDisc && <span className="flex items-center gap-1 text-[9px] font-black text-red-600 bg-red-50 px-2 py-0.5 rounded-lg border border-red-100"><Tag size={8} /> -{disc}%</span>}
                   </div>
                   <div className="flex items-center justify-center gap-3">
-                  <span className="text-sm font-black text-[#8B735B] line-through">{Math.round(finalP).toLocaleString()} ج.م</span>
-{hasDisc && <del className="text-[10px] text-gray-400 line-through">{Math.round(product.price).toLocaleString()} ج.م</del>}
+                    <span className="text-sm font-black text-[#8B735B]">{Math.round(finalP).toLocaleString()} ج.م</span>
+                    {hasDisc && <del className="text-[10px] text-gray-400 line-through">{Math.round(product.price).toLocaleString()} ج.م</del>}
                   </div>
                 </div>
               </Link>
@@ -367,8 +461,8 @@ export default function Home() {
             <div key={i} className="relative w-64 h-64 md:w-80 md:h-80 shrink-0 rounded-3xl overflow-hidden group">
               <Image src={src} alt="Community" fill sizes="(max-width: 768px) 256px, 320px" className="object-cover grayscale group-hover:grayscale-0 transition-all duration-700" />
               <Link href="#" className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-  <Camera size={30} className="text-white" />
-</Link>
+                <Camera size={30} className="text-white" />
+              </Link>
             </div>
           ))}
         </div>
