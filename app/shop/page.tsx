@@ -241,17 +241,18 @@ function ShopContent() {
                                     <RotateCcw size={10} /> إعادة ضبط
                                 </button>
                             </div>
-                            <div className="flex flex-col gap-2">
-                                {categoryOptions.map((cat) => (
-                                    <button
-                                        key={cat}
-                                        onClick={() => handleCategoryChange(cat)}
-                                        className={`text-xs px-5 py-4 rounded-2xl border text-right transition-all font-bold ${category === cat ? 'bg-[#4A3E31] text-white border-[#4A3E31] shadow-lg shadow-[#4A3E31]/20' : 'bg-white border-[#EDEAE5] text-[#8B735B] hover:border-[#8B735B]'}`}
-                                    >
-                                        {cat}
-                                    </button>
-                                ))}
-                            </div>
+                    
+<div className="flex lg:flex-col gap-2 overflow-x-auto pb-2 lg:pb-0 scrollbar-hide">
+    {categoryOptions.map((cat) => (
+        <button
+            key={cat}
+            onClick={() => handleCategoryChange(cat)}
+            className={`text-xs px-5 py-4 rounded-2xl border transition-all font-bold whitespace-nowrap shrink-0 lg:text-right lg:w-full ${category === cat ? 'bg-[#4A3E31] text-white border-[#4A3E31] shadow-lg shadow-[#4A3E31]/20' : 'bg-white border-[#EDEAE5] text-[#8B735B] hover:border-[#8B735B]'}`}
+        >
+            {cat}
+        </button>
+    ))}
+</div>
                         </div>
 
                         <div>
